@@ -78,6 +78,8 @@ static int scoreUsed = 0;
 
 static int signFeat = 30;
 
+static int numPipelines = 4;
+
 #define WHITE false
 #define BLACK true
 
@@ -102,6 +104,7 @@ void setSingleton()
 	signatureEnabled = ptr_singleton->s_signatureEnabled;
 	
 	DEBUGGING = ptr_singleton->s_DEBUGGING;
+	numPipelines = ptr_singleton->s_numPipelines;
 	
 	cout<<"threshold_rgb: "<<threshold_rgb <<endl;
 	cout<<"use63: "<< use63<<endl;
@@ -112,6 +115,7 @@ void setSingleton()
 	cout<<"punteggio16: "<< punteggio16<<endl;
 	cout<<"signatureEnabled: "<<signatureEnabled <<endl;
 	cout<<"DEBUGGING: "<<DEBUGGING <<endl;
+	cout<<"numPipelines: "<<numPipelines <<endl;
     }
     
 }
@@ -3544,7 +3548,7 @@ Detector::Detector(const std::vector< Ptr<Modality> >& modalities,
 {
 }
 
-void Detector::match(const std::vector<Mat>& sources, float threshold, std::vector<Match>& matches,
+void Detector::match(const std::vector<Mat>& sources, float threshold, std::vector<std::vector<Match> >& matches,
                      const std::vector<std::string>& class_ids, OutputArrayOfArrays quantized_images,
                      const std::vector<Mat>& masks) const
 {
@@ -3643,9 +3647,10 @@ void Detector::match(const std::vector<Mat>& sources, float threshold, std::vect
   }
 
   // Sort matches by similarity, and prune any duplicates introduced by pyramid refinement
-  std::sort(matches.begin(), matches.end());
+  for(int nm = 0; nm<numPipelines; nm++)
+    std::sort(matches[nm].begin(), matches[nm].end());
   
-  if(DEBUGGING) std::cout<<"matches size: "<<matches.size()<<std::endl;
+  //if(DEBUGGING) std::cout<<"matches size: "<<matches.size()<<std::endl;
   QuantizedPyramid * tmpQp = quantizers[0];
   ColorGradientPyramid * cgp = dynamic_cast<ColorGradientPyramid *>(tmpQp);
   
@@ -3658,98 +3663,102 @@ void Detector::match(const std::vector<Mat>& sources, float threshold, std::vect
   
   
   //waitKey();
-  std::vector<Match>::iterator new_end = std::unique(matches.begin(), matches.end());
-  matches.erase(new_end, matches.end());
-  
-  
-  
-  ///////////////DISEGNO SU MAGNITUDE/////////////////
-if(matches.size() > 0 && signatureEnabled == true)
-{
-  static const cv::Scalar COLORS[5] = { CV_RGB(0, 0, 255),
-                                        CV_RGB(0, 255, 0),
-                                        CV_RGB(255, 255, 0),
-                                        CV_RGB(255, 140, 0),
-                                        CV_RGB(255, 0, 0) };
-
-  for (int m = 0; m < modalities.size(); ++m)
+  for(int nm = 0; nm<numPipelines; nm++)
   {
-    
-    for(int scar = 0; scar<1; scar++)
+      std::vector<Match>::iterator new_end = std::unique(matches[nm].begin(), matches[nm].end());
+      matches[nm].erase(new_end, matches[nm].end());
+  }
+  
+  
+for(int nm = 0; nm<numPipelines; nm++)
+{
+  ///////////////DISEGNO SU MAGNITUDE/////////////////
+    if(matches[nm].size() > 0 && signatureEnabled == true)
     {
-	cv::Scalar color = COLORS[m];
-	const std::vector<cv::my_linemod::Template>& templates = getTemplates(matches[scar].class_id, matches[scar].template_id);
-	//cv::Point offset = cv::Point(matches[matchesChecked].x, matches[matchesChecked].y);
-	//cv::Point offsetEnd = cv::Point(matches[matchesChecked].x+templates[0].width, matches[matchesChecked].y+templates[0].height);
-	cv::Point offset = cv::Point(matches[scar].x, matches[scar].y);
-	
-	
-	
-	//imshow("magnitudeStrong+contour",cgp->magnitudeStrong);
-	
-	
-	cv::Point offsetEnd = cv::Point(matches[scar].x+templates[0].width, matches[scar].y+templates[0].height);
-	//int T = getT(0);
-	//Mat magnitudeMatched = cgp->magnitudeStrong(Rect(matches[matchesChecked].x, matches[matchesChecked].y, templates[0].width, templates[0].height));
-	Mat magnitudeMatched = cgp->magnitudeStrong(Rect(matches[scar].x, matches[scar].y, templates[0].width, templates[0].height));
-	
-	
-	Scalar colorM = Scalar( 255, 0, 0 );
-	vector<vector<Point> > contours;
-	contours.push_back(templates[0].contour);
-	drawContours( magnitudeMatched, contours, 0, colorM);
-	
-	
-	//imshow("cropped MASK", templates[0].croppedMask);
-	if(DEBUGGING) imshow("magnitude Matched + contour", magnitudeMatched);
+      static const cv::Scalar COLORS[5] = { CV_RGB(0, 0, 255),
+					    CV_RGB(0, 255, 0),
+					    CV_RGB(255, 255, 0),
+					    CV_RGB(255, 140, 0),
+					    CV_RGB(255, 0, 0) };
 
-	int countMagDef = 0;
-	for (int r = 0; r < magnitudeMatched.rows; ++r)
+      for (int m = 0; m < modalities.size(); ++m)
+      {
+	
+	for(int scar = 0; scar<1; scar++)
 	{
-	    float* source_r = magnitudeMatched.ptr<float>(r);
-	    for (int c = 0; c < magnitudeMatched.cols; ++c)
+	    cv::Scalar color = COLORS[m];
+	    const std::vector<cv::my_linemod::Template>& templates = getTemplates(matches[nm][scar].class_id, matches[nm][scar].template_id);
+	    
+	    cv::Point offset = cv::Point(matches[nm][scar].x, matches[nm][scar].y);
+	    
+	    
+	    
+	    //imshow("magnitudeStrong+contour",cgp->magnitudeStrong);
+	    
+	    
+	    cv::Point offsetEnd = cv::Point(matches[nm][scar].x+templates[0].width, matches[nm][scar].y+templates[0].height);
+	    //int T = getT(0);
+	    
+	    Mat magnitudeMatched = cgp->magnitudeStrong(Rect(matches[nm][scar].x, matches[nm][scar].y, templates[0].width, templates[0].height));
+	    
+	    
+	    Scalar colorM = Scalar( 255, 0, 0 );
+	    vector<vector<Point> > contours;
+	    contours.push_back(templates[0].contour);
+	    drawContours( magnitudeMatched, contours, 0, colorM);
+	    
+	    
+	    //imshow("cropped MASK", templates[0].croppedMask);
+	    if(DEBUGGING) imshow("magnitude Matched + contour", magnitudeMatched);
+
+	    int countMagDef = 0;
+	    for (int r = 0; r < magnitudeMatched.rows; ++r)
 	    {
-		if(source_r[c] > 0)
+		float* source_r = magnitudeMatched.ptr<float>(r);
+		for (int c = 0; c < magnitudeMatched.cols; ++c)
 		{
-		    double res = pointPolygonTest( contours[0], Point(c,r), true);
-		    if(res >= 0)
-			countMagDef++;
+		    if(source_r[c] > 0)
+		    {
+			double res = pointPolygonTest( contours[0], Point(c,r), true);
+			if(res >= 0)
+			    countMagDef++;
+		    }
 		}
 	    }
+
+
+
+	    if(DEBUGGING) std::cout<<"countMagDef: "<<countMagDef<<std::endl;
+
+
+	    int diffFeatures = countMagDef - templates[0].totalFeatures;
+	    int allowed_more_mag = 1;
+	    int thresh_allow = (templates[0].totalFeatures/100)*allowed_more_mag;
+	    if(DEBUGGING) std::cout<<"total: "<<templates[0].totalFeatures<<" - magDef: "<<countMagDef<<" - diff: "<<diffFeatures<<std::endl;
+	    int impact = 0;
+	    if(diffFeatures > 0)
+		impact = diffFeatures/thresh_allow;
+	    
+	    if(DEBUGGING) std::cout<<" similarity prima: = "<<matches[nm][scar].similarity<<std::endl;
+	    float similarityAdjusted = matches[nm][scar].similarity - (float)impact;
+	    if(DEBUGGING) std::cout<<" similarity dopo: = "<<similarityAdjusted<<std::endl;
+	    if(DEBUGGING) std::cout<<" IMPACT = "<<impact<<std::endl;
+	    if(similarityAdjusted<threshold)
+	    {
+		
+		matches[nm][scar].scartato = 1;
+	    }
+
+	    if(DEBUGGING) std::cout<<" scartato: "<<matches[nm][scar].scartato<<std::endl;
 	}
+	    
 
-
-
-	if(DEBUGGING) std::cout<<"countMagDef: "<<countMagDef<<std::endl;
-
-
-	int diffFeatures = countMagDef - templates[0].totalFeatures;
-	int allowed_more_mag = 1;
-	int thresh_allow = (templates[0].totalFeatures/100)*allowed_more_mag;
-	if(DEBUGGING) std::cout<<"total: "<<templates[0].totalFeatures<<" - magDef: "<<countMagDef<<" - diff: "<<diffFeatures<<std::endl;
-	int impact = 0;
-	if(diffFeatures > 0)
-	    impact = diffFeatures/thresh_allow;
 	
-	if(DEBUGGING) std::cout<<" similarity prima: = "<<matches[scar].similarity<<std::endl;
-	float similarityAdjusted = matches[scar].similarity - (float)impact;
-	if(DEBUGGING) std::cout<<" similarity dopo: = "<<similarityAdjusted<<std::endl;
-	if(DEBUGGING) std::cout<<" IMPACT = "<<impact<<std::endl;
-	if(similarityAdjusted<threshold)
-	{
-	    //matches[matchesChecked].scartato = 1;
-	    matches[scar].scartato = 1;
-	}
 
-	if(DEBUGGING) std::cout<<" scartato: "<<matches[scar].scartato<<std::endl;
+      }
     }
-	
-
-    
-
-  }
-}
 //imshow("msource in match", magnitudeMatched);
+}
 
 ////////////////////FINE DISEGNO SUMAGNITUDE/////////////////////
 }
@@ -3777,10 +3786,17 @@ struct MatchPredicateRGB
 void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
 						  const LinearMemoryPyramid& lm_pyramid_rgb,
                           const std::vector<Size>& sizes,
-                          float threshold, std::vector<Match>& matches,
+                          float threshold, std::vector<std::vector<Match> >& matches,
                           const std::string& class_id,
                           const std::vector<TemplatePyramid>& template_pyramids) const
 {
+   
+    
+  for(int np = 0; np<numPipelines; np++)
+  {
+    std::vector<Match> tmpVec; 
+    matches.push_back(tmpVec);
+  }
   // For each template...
   for (size_t template_id = 0; template_id < template_pyramids.size(); ++template_id)
   {
@@ -3886,6 +3902,11 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
       }
     }
     
+    std:vector<std::vector<Match> > arrayCandidates;
+    //itero per il numero di pipeline
+    for(int nm = 0; nm<numPipelines; nm++)
+	arrayCandidates.push_back(candidates);
+    
 	bool localEnabled = true;
     if(localEnabled == true)
     {
@@ -3915,122 +3936,206 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
       Mat total_similarity;
       Mat total_similarity_rgb;
       
-      
-      for (int m = 0; m < (int)candidates.size(); ++m)
+
+      //itero per il numero di pipeline
+      for(int nm = 0; nm<numPipelines; nm++)
       {
-        Match& match = candidates[m];
-        int x = match.x * 2 + 1; /// @todo Support other pyramid distance
-        int y = match.y * 2 + 1;
+	  std::vector<Match>& actualCandidates = arrayCandidates.at(nm);
+	  for (int m = 0; m < (int)actualCandidates.size(); ++m)
+	  {
+	    Match& match = actualCandidates[m];
+	    int x = match.x * 2 + 1; /// @todo Support other pyramid distance
+	    int y = match.y * 2 + 1;
 
-        // Require 8 (reduced) row/cols to the up/left
-        x = std::max(x, border);
-        y = std::max(y, border);
+	    // Require 8 (reduced) row/cols to the up/left
+	    x = std::max(x, border);
+	    y = std::max(y, border);
 
-        // Require 8 (reduced) row/cols to the down/left, plus the template size
-        x = std::min(x, max_x);
-        y = std::min(y, max_y);
+	    // Require 8 (reduced) row/cols to the down/left, plus the template size
+	    x = std::min(x, max_x);
+	    y = std::min(y, max_y);
 
-        // Compute local similarity maps for each modality
-        int num_features = 0;
-	int num_features_signature = 0;
-        for (int i = 0; i < (int)modalities.size(); ++i)
-        {
-          const Template& templ = tp[start + i];
-          num_features += static_cast<int>(templ.features.size());
-	  num_features_signature += static_cast<int>(templ.featuresSignature.size());
-          
-       /*   const Mat& m1 = (lms[i])[0];
-          const Mat& m2 = (lms_rgb[i])[0];
-          if(DEBUGGING) std::cout<<"i: "<<i<<" - lms[i].size(): "<<m1.cols<<" - lms_rgb[i].size(): "<<m2.cols<<std::endl;*/
-
-          if(i == 0) //color modality, add rgb
-	    similarityLocalRGB(lms[i], lms_rgb[i], templ, similarities[i], similarities_rgb[i], size, T, Point(x, y));
-	  if(i == 1) //color modality, without rgb
-	    similarityLocal(lms[i], templ, similarities[i], size, T, Point(x, y));
-          //if(DEBUGGING) std::cout<<"matrice similarities DOPO LOCAL"<<i<<":"<<std::endl<<similarities[0]<<std::endl;
-        }
-        
-        addSimilarities(similarities, total_similarity);
-        addSimilarities(similarities_rgb, total_similarity_rgb);
-
-        // Find best local adjustment
-        int best_score = 0;
-        int best_score_rgb = 0;
-        int best_r = -1, best_c = -1;
-        for (int r = 0; r < total_similarity.rows; ++r)
-        {
-          ushort* row = total_similarity.ptr<ushort>(r);
-          ushort* row_rgb = total_similarity_rgb.ptr<ushort>(r);
-          for (int c = 0; c < total_similarity.cols; ++c)
-          {
-            int score = row[c];
-            int score_rgb = row_rgb[c]*modalities.size();
-            /*if(DEBUGGING) std::cout<<"score: "<<score<<std::endl;
-            if(DEBUGGING) std::cout<<"score_rgb: "<<score_rgb<<std::endl;
-            */
-            //if(score_rgb > best_score_rgb)
-				//best_score_rgb = score_rgb;
-            //ANDRA' OTTIMIZZATO, COSÌ LO SCORE È DEL 200%
-            
-	    
-	    score = (score * 100.f) / (4 * num_features);
-	    if(punteggio16 == true)
+	    // Compute local similarity maps for each modality
+	    int num_features = 0;
+	    int num_features_signature = 0;
+	    for (int i = 0; i < (int)modalities.size(); ++i)
 	    {
-		if(featuresSignatureCandidates == false)
-		    score_rgb = (score_rgb * 100.f) / (16 * num_features) + 0.5f;
-		else
-		    score_rgb = (score_rgb * 100.f) / (16 * (num_features+num_features_signature)) + 0.5f;
+	      const Template& templ = tp[start + i];
+	      num_features += static_cast<int>(templ.features.size());
+	      num_features_signature += static_cast<int>(templ.featuresSignature.size());
+	      
+	   /*   const Mat& m1 = (lms[i])[0];
+	      const Mat& m2 = (lms_rgb[i])[0];
+	      if(DEBUGGING) std::cout<<"i: "<<i<<" - lms[i].size(): "<<m1.cols<<" - lms_rgb[i].size(): "<<m2.cols<<std::endl;*/
+
+	      if(i == 0) //color modality, add rgb
+		similarityLocalRGB(lms[i], lms_rgb[i], templ, similarities[i], similarities_rgb[i], size, T, Point(x, y));
+	      if(i == 1) //color modality, without rgb
+		similarityLocal(lms[i], templ, similarities[i], size, T, Point(x, y));
+	      //if(DEBUGGING) std::cout<<"matrice similarities DOPO LOCAL"<<i<<":"<<std::endl<<similarities[0]<<std::endl;
 	    }
-	    else
+	    
+	    addSimilarities(similarities, total_similarity);
+	    addSimilarities(similarities_rgb, total_similarity_rgb);
+
+	    // Find best local adjustment
+	    int best_score = 0;
+	    int best_score_rgb = 0;
+	    int best_r = -1, best_c = -1;
+	    for (int r = 0; r < total_similarity.rows; ++r)
 	    {
-		if(featuresSignatureCandidates == false)
-		    score_rgb = (score_rgb * 100.f) / (4 * num_features) + 0.5f;
+	      ushort* row = total_similarity.ptr<ushort>(r);
+	      ushort* row_rgb = total_similarity_rgb.ptr<ushort>(r);
+	      for (int c = 0; c < total_similarity.cols; ++c)
+	      {
+		int score = row[c];
+		int score_rgb = row_rgb[c]*modalities.size();
+		/*if(DEBUGGING) std::cout<<"score: "<<score<<std::endl;
+		if(DEBUGGING) std::cout<<"score_rgb: "<<score_rgb<<std::endl;
+		*/
+		//if(score_rgb > best_score_rgb)
+				    //best_score_rgb = score_rgb;
+		//ANDRA' OTTIMIZZATO, COSÌ LO SCORE È DEL 200%
+		
+		
+		score = (score * 100.f) / (4 * num_features);
+		if(punteggio16 == true)
+		{
+		    if(featuresSignatureCandidates == false)
+			score_rgb = (score_rgb * 100.f) / (16 * num_features) + 0.5f;
+		    else
+			score_rgb = (score_rgb * 100.f) / (16 * (num_features+num_features_signature)) + 0.5f;
+		}
 		else
-		    score_rgb = (score_rgb * 100.f) / (4 * (num_features+num_features_signature)) + 0.5f;
+		{
+		    if(featuresSignatureCandidates == false)
+			score_rgb = (score_rgb * 100.f) / (4 * num_features) + 0.5f;
+		    else
+			score_rgb = (score_rgb * 100.f) / (4 * (num_features+num_features_signature)) + 0.5f;
+		}
+		
+		
+		if(nm == 0)
+		{
+		    int score_combined = (score + score_rgb)/2;
+		    
+		    if (score_combined > best_score)
+		    {
+			//if((score_rgb >= threshold && score >= threshold -5) || (score >= threshold && score_rgb >= threshold -5))
+			//{
+			    best_score = score;
+			    best_score_rgb = score_rgb;
+			    best_r = r;
+			    best_c = c;
+			//}
+		    }
+		}
+		else if(nm == 1)
+		{
+		    int score_combined =0;
+		    
+		    if (score_combined > best_score)
+		    {
+			//if((score_rgb >= threshold && score >= threshold -5) || (score >= threshold && score_rgb >= threshold -5))
+			//{
+			    best_score = score;
+			    best_score_rgb = score_rgb;
+			    best_r = r;
+			    best_c = c;
+			//}
+		    }
+		}
+		else if(nm == 2)
+		{
+		    int score_combined = (score + score_rgb)/2;
+		    
+		    if (score_combined > best_score)
+		    {
+			//if((score_rgb >= threshold && score >= threshold -5) || (score >= threshold && score_rgb >= threshold -5))
+			//{
+			    best_score = score;
+			    best_score_rgb = score_rgb;
+			    best_r = r;
+			    best_c = c;
+			//}
+		    }
+		}
+		else if(nm == 3)
+		{
+		    int score_combined = (score + score_rgb)/2;
+		    
+		    if (score_combined > best_score)
+		    {
+			//if((score_rgb >= threshold && score >= threshold -5) || (score >= threshold && score_rgb >= threshold -5))
+			//{
+			    best_score = score;
+			    best_score_rgb = score_rgb;
+			    best_r = r;
+			    best_c = c;
+			//}
+		    }
+		}
+		
+		
+	      }
 	    }
-            //disabilitare abilitare score rgb
-	    int score_combined = (score + score_rgb)/2;
+	    // Update current match
+	    match.x = (x / T - 8 + best_c) * T + offset;
+	    match.y = (y / T - 8 + best_r) * T + offset;
+	    //match.similarity = (best_score * 100.f) / (4 * num_features);
+	    match.similarity = best_score;
+	    //match.similarity_rgb = (best_score_rgb * 100.f) / (16 * num_features);
+	    match.similarity_rgb = best_score_rgb;
+	  }
+
 	    
-	    //score = ((score/100.0f)*90.0f) +((score_rgb/100.0f)*10.0f);
+    //if(DEBUGGING) std::cout<<"dimensione candidates PRIMA IL REFINEMENT: "<<candidates.size()<<std::endl;
+	  // Filter out any matches that drop below the similarity threshold
+	  if(nm == 0)
+	  {
+	      std::vector<Match>::iterator new_end = std::remove_if(actualCandidates.begin(), actualCandidates.end(),
+								    MatchPredicate(threshold));
 	    
+	      actualCandidates.erase(new_end, actualCandidates.end());
+
+	      std::vector<Match>::iterator new_end_rgb = std::remove_if(actualCandidates.begin(), actualCandidates.end(),
+								    MatchPredicateRGB(threshold));
+	      actualCandidates.erase(new_end_rgb, actualCandidates.end());
+	  }
+	  else if(nm == 1)
+	  {
+	      std::vector<Match>::iterator new_end = std::remove_if(actualCandidates.begin(), actualCandidates.end(),
+								    MatchPredicate(threshold));
 	    
-	    //HO INVERTITO SCORE_RGB CON SCORE!!!!!!!!!!!!!!!!!!!
+	      actualCandidates.erase(new_end, actualCandidates.end());
+
+	      std::vector<Match>::iterator new_end_rgb = std::remove_if(actualCandidates.begin(), actualCandidates.end(),
+								    MatchPredicateRGB(threshold));
+	      actualCandidates.erase(new_end_rgb, actualCandidates.end());
+	  }
+	  else if(nm == 2)
+	  {
+	      std::vector<Match>::iterator new_end = std::remove_if(actualCandidates.begin(), actualCandidates.end(),
+								    MatchPredicate(threshold));
 	    
-	    //if (score > best_score)
-	    if (score_combined > best_score)
-            {
-		//if((score_rgb >= threshold && score >= threshold -5) || (score >= threshold && score_rgb >= threshold -5))
-		//{
-		    best_score = score;
-		    best_score_rgb = score_rgb;
-		    best_r = r;
-		    best_c = c;
-		//}
-            }
-          }
-        }
-        // Update current match
-        match.x = (x / T - 8 + best_c) * T + offset;
-        match.y = (y / T - 8 + best_r) * T + offset;
-        //match.similarity = (best_score * 100.f) / (4 * num_features);
-	match.similarity = best_score;
-        //match.similarity_rgb = (best_score_rgb * 100.f) / (16 * num_features);
-	match.similarity_rgb = best_score_rgb;
+	      actualCandidates.erase(new_end, actualCandidates.end());
+
+	      std::vector<Match>::iterator new_end_rgb = std::remove_if(actualCandidates.begin(), actualCandidates.end(),
+								    MatchPredicateRGB(threshold));
+	      actualCandidates.erase(new_end_rgb, actualCandidates.end());
+	  }
+	  else if(nm == 3)
+	  {
+	      std::vector<Match>::iterator new_end = std::remove_if(actualCandidates.begin(), actualCandidates.end(),
+								    MatchPredicate(threshold));
+	    
+	      actualCandidates.erase(new_end, actualCandidates.end());
+
+	      std::vector<Match>::iterator new_end_rgb = std::remove_if(actualCandidates.begin(), actualCandidates.end(),
+								    MatchPredicateRGB(threshold));
+	      actualCandidates.erase(new_end_rgb, actualCandidates.end());
+	  }
       }
-
-	
-//if(DEBUGGING) std::cout<<"dimensione candidates PRIMA IL REFINEMENT: "<<candidates.size()<<std::endl;
-      // Filter out any matches that drop below the similarity threshold
-      std::vector<Match>::iterator new_end = std::remove_if(candidates.begin(), candidates.end(),
-                                                            MatchPredicate(threshold));
-    
-      candidates.erase(new_end, candidates.end());
-
-      std::vector<Match>::iterator new_end_rgb = std::remove_if(candidates.begin(), candidates.end(),
-                                                            MatchPredicateRGB(threshold));
-      candidates.erase(new_end_rgb, candidates.end());
-      
-      
       
 
 //for(int h = 0; h<candidates.size(); h++)
@@ -4042,7 +4147,8 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
 }//LOCALENABLED
 	
     //if(DEBUGGING) std::cout<<"dimensione candidates DOPO IL REFINEMENT: "<<candidates.size()<<std::endl;
-    matches.insert(matches.end(), candidates.begin(), candidates.end());
+    for(int nm = 0; nm<numPipelines; nm++)
+	matches[nm].insert(matches[nm].end(), arrayCandidates[nm].begin(), arrayCandidates[nm].end());
   }
 }
 

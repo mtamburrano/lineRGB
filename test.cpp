@@ -130,7 +130,7 @@ void printFalsesResult(VideoResult vr)
     cout<<"Positivi attesi: "<<vr.positivesExpected<<endl;
     cout<<"False Positives: "<<vr.nFalsePositive<<endl;
     cout<<"False Negatives: "<<vr.nFalseNegative<<endl;
-    cout<<"Categorie contenute: "<<endl;
+    /*cout<<"Categorie contenute: "<<endl;
     
     
     for(int k = 0; k<vr.categoriesChecked.size(); k++)
@@ -151,7 +151,7 @@ void printFalsesResult(VideoResult vr)
         //VideoFrame vf = tv.frames.at(i);
         //cout<<"  Oggetti contenuti: "<<vf.nItem<<endl;
         
-    }
+    }*/
 }
 
 void printTestVideo(TestVideo tv)
@@ -2376,117 +2376,125 @@ void analyzeResults_global(vector<string>& nomiVideo, vector<int> v_threshold_rg
     
      
  }
-void saveResults(bool& actual_use63, int& actual_featuresUsed, int& actual_signFeat, bool& actual_punteggio16, bool& actual_featuresSignatureCandidates, bool& actual_grayEnabled, bool& actual_signatureEnabled, int& actual_threshold_rgb, int& actual_matching_threshold, VideoResult videoResult, string class_id, string nomeVideo){
-    string string_use63 = "use63-" + boolToString(actual_use63);
-    string string_threshold = "thresholdRGB-" + intToString(actual_threshold_rgb);
-    string string_featuresUsed = "featuresUsed-" + intToString(actual_featuresUsed);
-    string string_signFeat = "signFeat-" + intToString(actual_signFeat);
+void saveResults(bool& actual_use63, int& actual_featuresUsed, int& actual_signFeat, bool& actual_punteggio16, bool& actual_featuresSignatureCandidates, bool& actual_grayEnabled, bool& actual_signatureEnabled, int& actual_threshold_rgb, int& actual_matching_threshold, vector<VideoResult> videoResults, string class_id, string nomeVideo){
+    
+    for(int nm = 0; nm<videoResults.size(); nm++)
+    {
+        VideoResult videoResult = videoResults[nm];
+        
+        string string_use63 = "use63-" + boolToString(actual_use63);
+        string string_threshold = "thresholdRGB-" + intToString(actual_threshold_rgb);
+        string string_featuresUsed = "featuresUsed-" + intToString(actual_featuresUsed);
+        string string_signFeat = "signFeat-" + intToString(actual_signFeat);
 
-    string pathRes = "./results/" + nomeVideo + "/" + class_id + "/" + string_use63 + "_" + string_featuresUsed + "_" + string_signFeat + "_" + string_threshold + ".yml";
-    cout<<pathRes<<endl;
-    if(!fileExists(pathRes.c_str()))
-    {
-        cv::FileStorage fs(pathRes, cv::FileStorage::WRITE);
-        fs << "tests" << "[";
-        
-        fs << "{";
-        
-        fs << "Test" << 0;
-        fs << "signatureEnabled" << actual_signatureEnabled;
-        fs << "grayEnabled" << actual_grayEnabled;
-        fs << "featuresSignCand" << actual_featuresSignatureCandidates;
-        fs << "matching"  << actual_matching_threshold;
-        fs << "punteggio16"  << actual_punteggio16;
-        fs << "results" << "------";
-        fs <<"Expected positives"<<videoResult.positivesExpected;
-        fs <<"False Positives"<<videoResult.nFalsePositive;
-        fs <<"False Negatives"<<videoResult.nFalseNegative;
-        
-        fs << "}"; // current result
-        
-        fs << "]"; // tests
-    }
-    else
-    {
-        cv::FileStorage fs(pathRes, cv::FileStorage::READ);
-        
-        vector<bool> vr_punteggio16;
-        vector<bool> vr_featuresSignatureCandidates;
-        vector<bool> vr_signatureEnabled;
-        vector<bool> vr_grayEnabled;
-        vector<int> vr_matching_threshold;
-        vector<int> vr_exp_positives;
-        vector<int> vr_nFalsePositives;
-        vector<int> vr_nFalseNegatives;
-        
-        cv::FileNode fn = fs["tests"];
-        for (cv::FileNodeIterator i = fn.begin(); i != fn.end(); ++i)
+        string pipeline = "pipeline_" + intToString(nm);
+
+        string pathRes = "./results/" + pipeline + "/" + nomeVideo + "/" + class_id + "/" + string_use63 + "_" + string_featuresUsed + "_" + string_signFeat + "_" + string_threshold + ".yml";
+        cout<<pathRes<<endl;
+        if(!fileExists(pathRes.c_str()))
         {
-            vr_punteggio16.push_back(((int)(*i)["punteggio16"]));
-            vr_featuresSignatureCandidates.push_back(((int)(*i)["featuresSignCand"]));
-            vr_signatureEnabled.push_back(((int)(*i)["signatureEnabled"]));
-            vr_grayEnabled.push_back(((int)(*i)["grayEnabled"]));
-            vr_matching_threshold.push_back((*i)["matching"]);
-            vr_exp_positives.push_back((*i)["Expected positives"]);
-            vr_nFalsePositives.push_back((*i)["False Positives"]);
-            vr_nFalseNegatives.push_back((*i)["False Negatives"]);
+            cv::FileStorage fs(pathRes, cv::FileStorage::WRITE);
+            fs << "tests" << "[";
+            
+            fs << "{";
+            
+            fs << "Test" << 0;
+            fs << "signatureEnabled" << actual_signatureEnabled;
+            fs << "grayEnabled" << actual_grayEnabled;
+            fs << "featuresSignCand" << actual_featuresSignatureCandidates;
+            fs << "matching"  << actual_matching_threshold;
+            fs << "punteggio16"  << actual_punteggio16;
+            fs << "results" << "------";
+            fs <<"Expected positives"<<videoResult.positivesExpected;
+            fs <<"False Positives"<<videoResult.nFalsePositive;
+            fs <<"False Negatives"<<videoResult.nFalseNegative;
+            
+            fs << "}"; // current result
+            
+            fs << "]"; // tests
         }
-        
-        fs.release();
-        
-        bool isAlreadyInside = false;
-        //controllo se il result con questi parametri non è già presente
-        
-        for(int in = 0; in <vr_punteggio16.size(); in++)
+        else
         {
-            if(actual_punteggio16 == vr_punteggio16.at(in) &&
-                actual_featuresSignatureCandidates == vr_featuresSignatureCandidates.at(in) &&
-                actual_signatureEnabled == vr_signatureEnabled.at(in) &&
-                actual_grayEnabled == vr_grayEnabled.at(in) &&
-                actual_matching_threshold == vr_matching_threshold.at(in))
+            cv::FileStorage fs(pathRes, cv::FileStorage::READ);
+            
+            vector<bool> vr_punteggio16;
+            vector<bool> vr_featuresSignatureCandidates;
+            vector<bool> vr_signatureEnabled;
+            vector<bool> vr_grayEnabled;
+            vector<int> vr_matching_threshold;
+            vector<int> vr_exp_positives;
+            vector<int> vr_nFalsePositives;
+            vector<int> vr_nFalseNegatives;
+            
+            cv::FileNode fn = fs["tests"];
+            for (cv::FileNodeIterator i = fn.begin(); i != fn.end(); ++i)
             {
-                isAlreadyInside = true;
-                break;
+                vr_punteggio16.push_back(((int)(*i)["punteggio16"]));
+                vr_featuresSignatureCandidates.push_back(((int)(*i)["featuresSignCand"]));
+                vr_signatureEnabled.push_back(((int)(*i)["signatureEnabled"]));
+                vr_grayEnabled.push_back(((int)(*i)["grayEnabled"]));
+                vr_matching_threshold.push_back((*i)["matching"]);
+                vr_exp_positives.push_back((*i)["Expected positives"]);
+                vr_nFalsePositives.push_back((*i)["False Positives"]);
+                vr_nFalseNegatives.push_back((*i)["False Negatives"]);
             }
-        }
-        
-        if(isAlreadyInside == false)
-        {
-            vr_punteggio16.push_back(actual_punteggio16);
-            vr_featuresSignatureCandidates.push_back(actual_featuresSignatureCandidates);
-            vr_signatureEnabled.push_back(actual_signatureEnabled);
-            vr_grayEnabled.push_back(actual_grayEnabled);
-            vr_matching_threshold.push_back(actual_matching_threshold);
-            vr_exp_positives.push_back(videoResult.positivesExpected);
-            vr_nFalsePositives.push_back(videoResult.nFalsePositive);
-            vr_nFalseNegatives.push_back(videoResult.nFalseNegative);
-        }
-        
-        cv::FileStorage fs_new(pathRes, cv::FileStorage::WRITE);
-        fs_new << "tests" << "[";
-        for(int res = 0; res<vr_punteggio16.size(); res++)
-        {
-        
-        
-            fs_new << "{";
             
-            fs_new << "Test" << res;
-            fs_new << "signatureEnabled" << vr_signatureEnabled.at(res);
-            fs_new << "grayEnabled" << vr_grayEnabled.at(res);
-            fs_new << "featuresSignCand" << vr_featuresSignatureCandidates.at(res);
-            fs_new << "matching"  << vr_matching_threshold.at(res);
-            fs_new << "punteggio16"  << vr_punteggio16.at(res);
-            fs_new << "results" << "-----";
-            fs_new <<"Expected positives"<<vr_exp_positives.at(res);
-            fs_new <<"False Positives"<<vr_nFalsePositives.at(res);
-            fs_new <<"False Negatives"<<vr_nFalseNegatives.at(res);
+            fs.release();
             
-            fs_new << "}"; // current result
-        
-        
+            bool isAlreadyInside = false;
+            //controllo se il result con questi parametri non è già presente
+            
+            for(int in = 0; in <vr_punteggio16.size(); in++)
+            {
+                if(actual_punteggio16 == vr_punteggio16.at(in) &&
+                    actual_featuresSignatureCandidates == vr_featuresSignatureCandidates.at(in) &&
+                    actual_signatureEnabled == vr_signatureEnabled.at(in) &&
+                    actual_grayEnabled == vr_grayEnabled.at(in) &&
+                    actual_matching_threshold == vr_matching_threshold.at(in))
+                {
+                    isAlreadyInside = true;
+                    break;
+                }
+            }
+            
+            if(isAlreadyInside == false)
+            {
+                vr_punteggio16.push_back(actual_punteggio16);
+                vr_featuresSignatureCandidates.push_back(actual_featuresSignatureCandidates);
+                vr_signatureEnabled.push_back(actual_signatureEnabled);
+                vr_grayEnabled.push_back(actual_grayEnabled);
+                vr_matching_threshold.push_back(actual_matching_threshold);
+                vr_exp_positives.push_back(videoResult.positivesExpected);
+                vr_nFalsePositives.push_back(videoResult.nFalsePositive);
+                vr_nFalseNegatives.push_back(videoResult.nFalseNegative);
+            }
+            
+            cv::FileStorage fs_new(pathRes, cv::FileStorage::WRITE);
+            fs_new << "tests" << "[";
+            for(int res = 0; res<vr_punteggio16.size(); res++)
+            {
+            
+            
+                fs_new << "{";
+                
+                fs_new << "Test" << res;
+                fs_new << "signatureEnabled" << vr_signatureEnabled.at(res);
+                fs_new << "grayEnabled" << vr_grayEnabled.at(res);
+                fs_new << "featuresSignCand" << vr_featuresSignatureCandidates.at(res);
+                fs_new << "matching"  << vr_matching_threshold.at(res);
+                fs_new << "punteggio16"  << vr_punteggio16.at(res);
+                fs_new << "results" << "-----";
+                fs_new <<"Expected positives"<<vr_exp_positives.at(res);
+                fs_new <<"False Positives"<<vr_nFalsePositives.at(res);
+                fs_new <<"False Negatives"<<vr_nFalseNegatives.at(res);
+                
+                fs_new << "}"; // current result
+            
+            
+            }
+            fs_new << "]"; // tests
+            fs_new.release();
         }
-        fs_new << "]"; // tests
-        fs_new.release();
     }
 }
 

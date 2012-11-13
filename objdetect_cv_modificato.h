@@ -102,6 +102,8 @@ public:
         int s_matching_threshold;
         
         bool s_DEBUGGING;
+        
+        int s_numPipelines;
 };
 
 /// @todo Convert doxy comments to rst
@@ -423,7 +425,7 @@ public:
    *                       the same size as sources.  Each element must be
    *                       empty or the same size as its corresponding source.
    */
-  void match(const std::vector<Mat>& sources, float threshold, std::vector<Match>& matches,
+  void match(const std::vector<Mat>& sources, float threshold, std::vector<std::vector<Match> >& matches,
              const std::vector<std::string>& class_ids = std::vector<std::string>(),
              OutputArrayOfArrays quantized_images = noArray(),
              const std::vector<Mat>& masks = std::vector<Mat>()) const;
@@ -521,7 +523,7 @@ protected:
   void matchClass(const LinearMemoryPyramid& lm_pyramid,
 					const LinearMemoryPyramid& lm_pyramid_rgb,
                   const std::vector<Size>& sizes,
-                  float threshold, std::vector<Match>& matches,
+                  float threshold, std::vector<std::vector<Match> >& matches,
                   const std::string& class_id,
                   const std::vector<TemplatePyramid>& template_pyramids) const;
 };

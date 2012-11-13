@@ -11,6 +11,8 @@ using namespace cv;
 
 static bool DEBUGGING = false;
 static bool TESTING = true;
+static int numPipelines = 4;
+static int curMatch = 0;
 
 // Adapted from cv_timer in cv_utilities
 class Timer
@@ -273,6 +275,7 @@ int main(int argc, char * argv[])
 	    ptr_singleton->s_featuresUsed = actual_featuresUsed;
 	    ptr_singleton->s_signFeat = actual_signFeat;
 	    ptr_singleton->s_DEBUGGING = DEBUGGING;
+	    ptr_singleton->s_numPipelines = numPipelines;
 	    
 	    for(int w = 0; w<all_categories.size(); w++)
 	    {
@@ -564,6 +567,7 @@ int main(int argc, char * argv[])
 	ptr_singleton->s_punteggio16 = actual_punteggio16;
 	
 	ptr_singleton->s_DEBUGGING = DEBUGGING;
+	ptr_singleton->s_numPipelines = numPipelines;
 	
 	Timer one_video_loop_timer;
 	one_video_loop_timer.start();
@@ -652,7 +656,11 @@ int main(int argc, char * argv[])
 		{
 		    vector<pair<string,string> > tmp_categoriesToCheck;
 		    tmp_categoriesToCheck.push_back(category);
-		    VideoResult videoResult = VideoResult(cartellaVideo, tmp_categoriesToCheck);
+		    
+		    vector<VideoResult> videoResults;
+		    for(int nm= 0; nm<numPipelines; nm++)
+			videoResults.push_back(VideoResult(cartellaVideo, tmp_categoriesToCheck));
+		    
 		    if(testselected == false || fromselected == false)
 		    {
 			filename = "./templates/" + class_id + "/" + string_use63 + "_" + string_featuresUsed + "_" + string_signFeat + "_" + string_threshold + ".yml";
@@ -719,7 +727,7 @@ int main(int argc, char * argv[])
 			    //drawGroundTruth(tv.frames.at(current-1), display);
 
 			    // Perform matching
-			    vector<cv::my_linemod::Match> matches;
+			    vector<vector<cv::my_linemod::Match> >matches;
 			    vector<std::string> class_ids;
 			    vector<cv::Mat> quantized_images;
 			    
@@ -731,25 +739,28 @@ int main(int argc, char * argv[])
 			    int classes_visited = 0;
 			    std::set<std::string> visited;
 			    
+			    for(int nm = 0; nm<numPipelines; nm++)
+			    {
 			    //elimina scartati
-			    vector<cv::my_linemod::Match>::iterator it;
-			    for (it=matches.begin(); it<matches.end(); it++)
-			    {
-				if((*it).scartato == 1)
+				vector<cv::my_linemod::Match>::iterator it;
+				for (it=matches[nm].begin(); it<matches[nm].end(); it++)
 				{
-				   matches.erase(it);
-				   break;
+				    if((*it).scartato == 1)
+				    {
+				       matches[nm].erase(it);
+				       break;
+				    }
+				    else
+					break;
 				}
-				else
-				    break;
+			    
+				//controllo falsi negativi e falsi positivi
+				checkFrameFalses(matches[nm], tv.frames.at(current-1), tmp_categoriesToCheck, detector, videoResults[nm], display);
 			    }
-			    
-			    //controllo falsi negativi e falsi positivi
-			    checkFrameFalses(matches, tv.frames.at(current-1), tmp_categoriesToCheck, detector, videoResult, display);
-			    
-			    for (int i = 0; TESTING == false && (i < (int)matches.size()) && (classes_visited < num_classes); ++i)
+			    for (int i = 0; TESTING == false && (i < (int)matches[curMatch].size()) && (classes_visited < num_classes); ++i)
 			    {
-			      cv::my_linemod::Match m = matches[i];
+			      //VISUALIZZO SOLO IL CURMATCH DELLA PIPELINE
+			      cv::my_linemod::Match m = matches[curMatch][i];
 
 			      if (visited.insert(m.class_id).second)
 			      {
@@ -782,7 +793,7 @@ int main(int argc, char * argv[])
 			      }
 			    }
 			    
-			    if (!TESTING && matches.empty())
+			    if (!TESTING && matches[curMatch].empty())
 			      printf("No matches found...\n");
 			    if (!TESTING)
 			    {
@@ -826,11 +837,16 @@ int main(int argc, char * argv[])
 			current++;
 		    }		
 		    //SALVA RISULTATI
-		    saveResults(actual_use63, actual_featuresUsed, actual_signFeat, actual_punteggio16, actual_featuresSignatureCandidates, actual_grayEnabled, actual_signatureEnabled, actual_threshold_rgb, actual_matching_threshold, videoResult, class_id, nomeVideo);
+		    if(testselected == false)
+			saveResults(actual_use63, actual_featuresUsed, actual_signFeat, actual_punteggio16, actual_featuresSignatureCandidates, actual_grayEnabled, actual_signatureEnabled, actual_threshold_rgb, actual_matching_threshold, videoResults, class_id, nomeVideo);
 		    
 		    if(testselected == true)
 		    {
-			printFalsesResult(videoResult);
+			for(int nm = 0; nm<numPipelines; nm++)
+			{
+			    cout<<"PIPELINE "<<nm<<endl;
+			    printFalsesResult(videoResults[nm]);
+			}
 			one_video_loop_timer.stop();
 			cout<<endl<<endl<<"1 VIDEO LOOP TIME: "<<one_video_loop_timer.time()<<endl<<endl;
 			return 0;
