@@ -74,6 +74,7 @@ static string increment = "big";
 //più bassa, meno i colori si accorpano
 static int threshold_rgb = 45;
 //static float threshold_mag = 50;//percentuale
+static int scoreUsed = 0;
 
 static int signFeat = 30;
 
@@ -89,6 +90,7 @@ void setSingleton()
     if(ptr_singleton->initialized == true)
     {
 	cout<<endl<<"-->Singleton caricato<--"<<endl;
+
 	
 	threshold_rgb = ptr_singleton->s_threshold_rgb;
 	use63 = ptr_singleton->s_use63;
@@ -465,22 +467,7 @@ void writeMat(Mat& m)
 	string fileNameConf = "./matrice_stampata.txt";
 	FileStorage fsConf(fileNameConf, FileStorage::WRITE);
     fsConf << "m" << m;
-    /*
-    fs <<"matrix";
-	std::stringstream sstm;
-	fs <<"[";
-	for(int r = 0; r<m.rows; r++)
-	{
-		
-		sstm << "r"<<r<<": ";
-		for(int c = 0; c<m.cols; c++)
-		{
-			sstm << (int)m.at<uchar>(r,c) << " ";
-		}
-		fs<< sstm.str();
-	}
-	fs << "]";
-	*/
+
 	fsConf.release();
 }
 
@@ -837,159 +824,6 @@ unsigned char get_RGB_quantization(unsigned short r, unsigned short g, unsigned 
 }
 
 
-/** 
- * \brief returns the quantization based on the diffs among values of rgb channels
- * 00000001 = R = 1
- * 00000010 = G = 2
- * 00000100 = B = 4
- * 00001000 = RG = 8
- * 00010000 = RB = 16
- * 00100000 = GB = 32
- * 01000000 = RGB_WHITE = 64
- * 10000000 = RGB_BLACK = 128
- * 
- * \param[in]  m_r       magnitude of the channel R
- * \param[in]  m_g       magnitude of the channel G
- * \param[in]  m_b       magnitude of the channel B
- * \param[in]  r         value of the channel R
- * \param[in]  g         value of the channel G
- * \param[in]  b         value of the channel B
- * \param[in]  index_best       index of the channel with highest magnitude
- * \param[in]  threshold 		if the difference of the magnitude is below this threshold, they are considered similar
- * 
- * max magnitude = 18080,358 (1024^(sqr(2))
- * 20%=3616
- * **/
-/*
-unsigned char get_magnitude_RGB_quantization(int m_r, int m_g, int m_b, int index_best, float threshold)
-{
-
-	unsigned char response = -1;
-	if(index_best == 0)
-	{
-	    if((float)m_r/m_g >= threshold)
-		if((float)m_r/m_b >= threshold)
-		{
-		    if(isBlackMag(m_r,m_g,m_b))
-			    response = 128;
-		    else
-			    response = 64;
-		}
-		else
-		    response = 8;
-	    else
-		if((float)m_r/m_b >= threshold)
-		    response = 16;
-		else
-		    response = 1;
-	}
-	if(index_best == 1)
-	{
-	    if((float)m_g/m_r >= threshold)
-		if((float)m_g/m_b >= threshold)
-		{
-		    if(isBlackMag(m_r,m_g,m_b))
-			    response = 128;
-		    else
-			    response = 64;
-		}
-		else
-		    response = 8;
-	    else
-		if((float)m_g/m_b >= threshold)
-		    response = 32;
-		else
-		    response = 2;
-	}
-	if(index_best == 2)
-	{
-	    if((float)m_b/m_r >= threshold)
-		if((float)m_b/m_g >= threshold)
-		{
-		    if(isBlackMag(m_r,m_g,m_b))
-			    response = 128;
-		    else
-			    response = 64;
-		}
-		else
-		    response = 16;
-	    else
-		if((float)m_b/m_g >= threshold)
-		    response = 32;
-		else
-		    response = 4;
-	}
-
-	
-	return response;
-}*/
-
-unsigned char get_magnitude_RGB_quantization(float m_r, float m_g, float m_b, int index_best, float threshold)
-{
-
-
-	unsigned char response = -1;
-	if(index_best == 0)
-	{
-	    
-		if(m_g+threshold >= m_r)
-			if(m_b + threshold >= m_r)
-			{
-				if(isBlackMag(m_r,m_g,m_b))
-					response = 128;
-				else
-					response = 64;
-			}
-			else
-				response = 4; //B
-		else
-			if(m_b + threshold >= m_r)
-				response = 2; //G
-			else
-				response = 32; //BG  
-	}
-	else if(index_best == 1)
-	{
-		if(m_r+threshold >= m_g)
-			if(m_b + threshold >= m_g)
-			{
-				if(isBlackMag(m_r,m_g,m_b))
-					response = 128;
-				else
-					response = 64;
-			}
-			else
-				response = 4; //B
-		else
-			if(m_b + threshold >= m_g)
-				response = 1; //R
-			else
-				response = 16;  //BR
-	}
-	else if(index_best == 2)
-	{
-		if(m_r+threshold >= m_b)
-			if(m_g + threshold >= m_b)
-			{
-				if(isBlackMag(m_r,m_g,m_b))
-					response = 128;
-				else
-					response = 64;
-			}
-			else
-				response = 2; //G
-		else
-			if(m_g + threshold >= m_b)
-				response = 1; //R
-			else
-				response = 8;  //RG
-	}
-	
-
-	
-	return response;
-}
-
 /**
  * \brief Compute quantized orientation image from color image.
  *
@@ -1089,10 +923,11 @@ void quantizedOrientations(const Mat& src, Mat& magnitude, Mat& angle, Mat& rgb,
      /*if(DEBUGGING) std::cout<<"bluex: "<<ptrx[i]<<" - bluey: "<<ptry[i]<<std::endl;
      if(DEBUGGING) std::cout<<"greenx: "<<ptrx[i+1]<<" - greeny: "<<ptry[i+1]<<std::endl;
      if(DEBUGGING) std::cout<<"redx: "<<ptrx[i+2]<<" - redy: "<<ptry[i+2]<<std::endl;*/
-     if(ptrx[i] > max)
+     /*if(ptrx[i] > max)
 	max = ptrx[i];
     if(ptrx[i] < min)
 	min = ptrx[i];
+     */
      
       // Use the gradient orientation of the channel whose magnitude is largest
 	  int mag1 = CV_SQR(ptrx[i]) + CV_SQR(ptry[i]);
@@ -1228,41 +1063,44 @@ if(onlyOne)
   
   hysteresisGradient(magnitude, angle, sobel_ag, CV_SQR(w_threshold), CV_SQR(s_threshold), computeMagnitudeStrong, magnitudeStrong);
   Mat mag_temp;
-  convertScaleAbs( magnitude/100, mag_temp);
-  if(DEBUGGING)imshow("magnitude in quantized", mag_temp);
-  if(DEBUGGING)imshow("angle in quantized", angle);
+  if(DEBUGGING)
+  {
+      convertScaleAbs( magnitude/100, mag_temp);
+      imshow("magnitude in quantized", mag_temp);
+      imshow("angle in quantized", angle);
+    }
   
   
-  
-  
-  Mat srcTemp;
-    src.copyTo(srcTemp);
-  for (int lr = 0; lr < rgb.rows; ++lr)
-    {
-	const uchar* rgb_tmp_r = rgb.ptr<uchar>(lr); 
-	for (int lc = 0; lc < rgb.cols; ++lc)
+  if(DEBUGGING)
+  {
+      Mat srcTemp;
+      src.copyTo(srcTemp);
+      for (int lr = 0; lr < rgb.rows; ++lr)
 	{
-      cv::Scalar colorT;
-      cv::Point pt(lc, lr);
-      switch(getLabel(rgb_tmp_r[lc]))
-      {
-      case 0: colorT = CV_RGB(255,0,0); break;
-      case 1: colorT = CV_RGB(0,255,0); break;
-      case 2: colorT = CV_RGB(0,0,255); break;
-      case 3: colorT = CV_RGB(255,255,0); break;
-      case 4: colorT = CV_RGB(255,0,255); break;
-      case 5: colorT = CV_RGB(0,255,255); break;
-      case 6: colorT = CV_RGB(255,255,255); break;
-      case 7: colorT = CV_RGB(0,0,0); break;
-      case 8: colorT = CV_RGB(127,127,127); break;
-      case 9: colorT = CV_RGB(127,127,127); break;
-      }
-      cv::circle(srcTemp, pt, 0, colorT);
-  }
-}
-if(computeMagnitudeStrong == true)
-    if(DEBUGGING)imshow("colorRGB_quant", srcTemp);	
-    
+	    const uchar* rgb_tmp_r = rgb.ptr<uchar>(lr); 
+	    for (int lc = 0; lc < rgb.cols; ++lc)
+	    {
+	      cv::Scalar colorT;
+	      cv::Point pt(lc, lr);
+	      switch(getLabel(rgb_tmp_r[lc]))
+	      {
+	      case 0: colorT = CV_RGB(255,0,0); break;
+	      case 1: colorT = CV_RGB(0,255,0); break;
+	      case 2: colorT = CV_RGB(0,0,255); break;
+	      case 3: colorT = CV_RGB(255,255,0); break;
+	      case 4: colorT = CV_RGB(255,0,255); break;
+	      case 5: colorT = CV_RGB(0,255,255); break;
+	      case 6: colorT = CV_RGB(255,255,255); break;
+	      case 7: colorT = CV_RGB(0,0,0); break;
+	      case 8: colorT = CV_RGB(127,127,127); break;
+	      case 9: colorT = CV_RGB(127,127,127); break;
+	      }
+	      cv::circle(srcTemp, pt, 0, colorT);
+	    }
+	}
+	if(computeMagnitudeStrong == true)
+	    imshow("colorRGB_quant", srcTemp);	
+   } 
     
   
   
@@ -1855,30 +1693,33 @@ bool ColorGradientPyramid::extractTemplate(Template& templ) const
     //local_mask.copyTo(local_mask_temp);
     //cvtColor(local_mask_temp, local_mask_temp, CV_GRAY2RGB);
     
-    for (int itS = 0; itS < templ.featuresSignature.size(); itS++)
+    if(DEBUGGING)
     {
-	cv::my_linemod::Feature featS = templ.featuresSignature.at(itS);
-	
-	cv::Scalar colorT;
-	cv::Point pt(featS.x, featS.y);
-	switch(featS.rgbLabel)
+	for (int itS = 0; itS < templ.featuresSignature.size(); itS++)
 	{
-	    case 0: colorT = CV_RGB(255,0,0); break;
-	    case 1: colorT = CV_RGB(0,255,0); break;
-	    case 2: colorT = CV_RGB(0,0,255); break;
-	    case 3: colorT = CV_RGB(255,255,0); break;
-	    case 4: colorT = CV_RGB(255,0,255); break;
-	    case 5: colorT = CV_RGB(0,255,255); break;
-	    case 6: colorT = CV_RGB(255,255,255); break;
-	    case 7: colorT = CV_RGB(0,0,0); break;
+	    cv::my_linemod::Feature featS = templ.featuresSignature.at(itS);
+	    
+	    cv::Scalar colorT;
+	    cv::Point pt(featS.x, featS.y);
+	    switch(featS.rgbLabel)
+	    {
+		case 0: colorT = CV_RGB(255,0,0); break;
+		case 1: colorT = CV_RGB(0,255,0); break;
+		case 2: colorT = CV_RGB(0,0,255); break;
+		case 3: colorT = CV_RGB(255,255,0); break;
+		case 4: colorT = CV_RGB(255,0,255); break;
+		case 5: colorT = CV_RGB(0,255,255); break;
+		case 6: colorT = CV_RGB(255,255,255); break;
+		case 7: colorT = CV_RGB(0,0,0); break;
+	    }
+	    cv::circle(local_mask_temp, pt, 0, colorT);
+	
 	}
-	cv::circle(local_mask_temp, pt, 0, colorT);
-    
-    }
-    if(DEBUGGING)imshow("mask senza features signature"+increment,local_mask);
-    if(DEBUGGING)imshow("mask con features signature"+increment,local_mask_temp);
-    increment = "small";
-    if(DEBUGGING) std::cout<<"num features signature: "<<templ.featuresSignature.size()<<std::endl;
+	imshow("mask senza features signature"+increment,local_mask);
+	imshow("mask con features signature"+increment,local_mask_temp);
+	increment = "small";
+	std::cout<<"num features signature: "<<templ.featuresSignature.size()<<std::endl;
+  }
   
   if(DEBUGGING) std::cout<<"quantCount: "<<quantCount<<std::endl;
   if(DEBUGGING) std::cout<<"quantCountThreshold: "<<quantCountThreshold<<std::endl;
@@ -1897,43 +1738,36 @@ bool ColorGradientPyramid::extractTemplate(Template& templ) const
 
 //if(DEBUGGING) std::cout<<"candidates.size: "<<candidates.size()<<std::endl;
 //if(DEBUGGING) std::cout<<"magnitude.size: "<<magnitude.cols*magnitude.rows<<std::endl;
-  Mat tmp(angle.size(), CV_8UC1, Scalar(255));
-  for(int k = 0; k<(int)candidates.size(); k++)
+  if(DEBUGGING)
   {
-	  
-	  Candidate c = candidates.at(k);
-	  Feature f = c.f;
-	  tmp.at<uchar>(f.y,f.x) = f.rgbLabel;
-	  
+      Mat tmp(angle.size(), CV_8UC1, Scalar(255));
+      for(int k = 0; k<(int)candidates.size(); k++)
+      {
+	      
+	      Candidate c = candidates.at(k);
+	      Feature f = c.f;
+	      tmp.at<uchar>(f.y,f.x) = f.rgbLabel;
+	      
+      }
+      imshow("in EXTRACTTEMPLATE:",tmp);
   }
-  if(DEBUGGING)imshow("in EXTRACTTEMPLATE:",tmp);
-
+  
+  
   // Use heuristic based on surplus of candidates in narrow outline for initial distance threshold
   float distance = static_cast<float>(candidates.size() / num_features + 1);
   selectScatteredFeatures(candidates, templ.features, num_features, distance);
 
-	/*////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-	///////SOSTITUISCO LA FUNZIONE SCATTERED COPIANDO PARI PARI I CANDIDATI NELLE FEATURE, PROBABILMENTE DIVENTANO TROPPE//
-	if(DEBUGGING) std::cout<<"NUM FEATURES: "<<num_features<<std::endl;
-	if(DEBUGGING) std::cout<<"templ.features.size: "<<templ.features.size()<<std::endl;
-	for(int j = 0; j<candidates.size(); j++)
-	{
-		Candidate c = candidates.at(j);
-	    Feature f = c.f;
-	    templ.features.push_back(f);
-	}
-	*/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-	Mat tmp2(angle.size(), CV_8UC1, Scalar(255));
-  for(int k = 0; k<(int)templ.features.size(); k++)
+  if(DEBUGGING)
   {
-	  Feature f = templ.features[k];
-	  tmp2.at<uchar>(f.y,f.x) = f.rgbLabel;
-	  //if(DEBUGGING) std::cout<<"y: "<<f.y<<std::endl;
+      Mat tmp2(angle.size(), CV_8UC1, Scalar(255));
+      for(int k = 0; k<(int)templ.features.size(); k++)
+      {
+	      Feature f = templ.features[k];
+	      tmp2.at<uchar>(f.y,f.x) = f.rgbLabel;
+	      //if(DEBUGGING) std::cout<<"y: "<<f.y<<std::endl;
+      }
+      imshow("in EXTRACTTEMPLATE dopo lo scattered:",tmp2);
   }
-  if(DEBUGGING)imshow("in EXTRACTTEMPLATE dopo lo scattered:",tmp2);
-
 
   // Size determined externally, needs to match templates for other modalities
   templ.width = -1;
@@ -2332,8 +2166,8 @@ void orUnaligned8u(const uchar * src, const int src_stride,
 #if CV_SSE2
   volatile bool haveSSE2 = checkHardwareSupport(CV_CPU_SSE2);
   volatile bool haveSSE3 = checkHardwareSupport(CV_CPU_SSE3);
-  haveSSE2 = false;
-haveSSE3 = false;
+//haveSSE2 = false;
+//haveSSE3 = false;
   bool src_aligned = reinterpret_cast<unsigned long long>(src) % 16 == 0;
 #endif
 
@@ -2415,7 +2249,8 @@ void spread(const Mat& src, Mat& dst, int T)
 
 // Auto-generated by create_similarity_lut.py
 CV_DECL_ALIGNED(16) static const unsigned char SIMILARITY_LUT[256] = {0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4, 0, 0, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 0, 3, 4, 4, 3, 3, 4, 4, 2, 3, 4, 4, 3, 3, 4, 4, 0, 1, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 0, 2, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 0, 2, 1, 2, 0, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 0, 1, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 0, 3, 2, 3, 1, 3, 2, 3, 0, 3, 2, 3, 1, 3, 2, 3, 0, 0, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4, 0, 1, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 0, 3, 4, 4, 3, 3, 4, 4, 2, 3, 4, 4, 3, 3, 4, 4, 0, 2, 1, 2, 0, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 0, 2, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 0, 3, 2, 3, 1, 3, 2, 3, 0, 3, 2, 3, 1, 3, 2, 3, 0, 1, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4};
-static const unsigned char SIMILARITY_RGB_LUT[8][256] = {{0, 4, 0, 4, 0, 4, 0, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 0, 4, 0, 4, 0, 4, 0, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 1, 4, 1, 4, 1, 4, 1, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 1, 4, 1, 4, 1, 4, 1, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 1, 4, 1, 4, 1, 4, 1, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 1, 4, 1, 4, 1, 4, 1, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 1, 4, 1, 4, 1, 4, 1, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 1, 4, 1, 4, 1, 4, 1, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4}, {0, 0, 4, 4, 0, 0, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 0, 0, 4, 4, 0, 0, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 1, 1, 4, 4, 1, 1, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 1, 1, 4, 4, 1, 1, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 1, 1, 4, 4, 1, 1, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 1, 1, 4, 4, 1, 1, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 1, 1, 4, 4, 1, 1, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 1, 1, 4, 4, 1, 1, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4}, {0, 0, 0, 0, 4, 4, 4, 4, 0, 0, 0, 0, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 1, 1, 1, 1, 4, 4, 4, 4, 1, 1, 1, 1, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 1, 1, 1, 1, 4, 4, 4, 4, 1, 1, 1, 1, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 1, 1, 1, 1, 4, 4, 4, 4, 1, 1, 1, 1, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4}, {0, 3, 3, 3, 0, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 1, 3, 3, 3, 1, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 1, 3, 3, 3, 1, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 1, 3, 3, 3, 1, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 2, 3, 3, 3, 2, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 2, 3, 3, 3, 2, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 2, 3, 3, 3, 2, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 2, 3, 3, 3, 2, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 2, 3, 3, 3, 2, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 2, 3, 3, 3, 2, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 2, 3, 3, 3, 2, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 2, 3, 3, 3, 2, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 2, 3, 3, 3, 2, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 2, 3, 3, 3, 2, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 2, 3, 3, 3, 2, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 2, 3, 3, 3, 2, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4}, {0, 3, 0, 3, 3, 3, 3, 3, 1, 3, 1, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 1, 3, 1, 3, 3, 3, 3, 3, 1, 3, 1, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 3, 2, 3, 3, 3, 3, 3, 2, 3, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 3, 2, 3, 3, 3, 3, 3, 2, 3, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 3, 2, 3, 3, 3, 3, 3, 2, 3, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 3, 2, 3, 3, 3, 3, 3, 2, 3, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 3, 2, 3, 3, 3, 3, 3, 2, 3, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 3, 2, 3, 3, 3, 3, 3, 2, 3, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4}, {0, 0, 3, 3, 3, 3, 3, 3, 1, 1, 3, 3, 3, 3, 3, 3, 1, 1, 3, 3, 3, 3, 3, 3, 1, 1, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 3, 3, 3, 3, 3, 3, 2, 2, 3, 3, 3, 3, 3, 3, 2, 2, 3, 3, 3, 3, 3, 3, 2, 2, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 3, 3, 3, 3, 3, 3, 2, 2, 3, 3, 3, 3, 3, 3, 2, 2, 3, 3, 3, 3, 3, 3, 2, 2, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 3, 3, 3, 3, 3, 3, 2, 2, 3, 3, 3, 3, 3, 3, 2, 2, 3, 3, 3, 3, 3, 3, 2, 2, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4}, {0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4}, {0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4}};
+//static const unsigned char SIMILARITY_RGB_LUT[8][256] = {{0, 4, 0, 4, 0, 4, 0, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 0, 4, 0, 4, 0, 4, 0, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 1, 4, 1, 4, 1, 4, 1, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 1, 4, 1, 4, 1, 4, 1, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 1, 4, 1, 4, 1, 4, 1, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 1, 4, 1, 4, 1, 4, 1, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 1, 4, 1, 4, 1, 4, 1, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 1, 4, 1, 4, 1, 4, 1, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4}, {0, 0, 4, 4, 0, 0, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 0, 0, 4, 4, 0, 0, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 1, 1, 4, 4, 1, 1, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 1, 1, 4, 4, 1, 1, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 1, 1, 4, 4, 1, 1, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 1, 1, 4, 4, 1, 1, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 1, 1, 4, 4, 1, 1, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 1, 1, 4, 4, 1, 1, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4, 4}, {0, 0, 0, 0, 4, 4, 4, 4, 0, 0, 0, 0, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 1, 1, 1, 1, 4, 4, 4, 4, 1, 1, 1, 1, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 1, 1, 1, 1, 4, 4, 4, 4, 1, 1, 1, 1, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 1, 1, 1, 1, 4, 4, 4, 4, 1, 1, 1, 1, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4}, {0, 3, 3, 3, 0, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 1, 3, 3, 3, 1, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 1, 3, 3, 3, 1, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 1, 3, 3, 3, 1, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 2, 3, 3, 3, 2, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 2, 3, 3, 3, 2, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 2, 3, 3, 3, 2, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 2, 3, 3, 3, 2, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 2, 3, 3, 3, 2, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 2, 3, 3, 3, 2, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 2, 3, 3, 3, 2, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 2, 3, 3, 3, 2, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 2, 3, 3, 3, 2, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 2, 3, 3, 3, 2, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 2, 3, 3, 3, 2, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 2, 3, 3, 3, 2, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4}, {0, 3, 0, 3, 3, 3, 3, 3, 1, 3, 1, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 1, 3, 1, 3, 3, 3, 3, 3, 1, 3, 1, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 3, 2, 3, 3, 3, 3, 3, 2, 3, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 3, 2, 3, 3, 3, 3, 3, 2, 3, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 3, 2, 3, 3, 3, 3, 3, 2, 3, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 3, 2, 3, 3, 3, 3, 3, 2, 3, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 3, 2, 3, 3, 3, 3, 3, 2, 3, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 3, 2, 3, 3, 3, 3, 3, 2, 3, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4}, {0, 0, 3, 3, 3, 3, 3, 3, 1, 1, 3, 3, 3, 3, 3, 3, 1, 1, 3, 3, 3, 3, 3, 3, 1, 1, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 3, 3, 3, 3, 3, 3, 2, 2, 3, 3, 3, 3, 3, 3, 2, 2, 3, 3, 3, 3, 3, 3, 2, 2, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 3, 3, 3, 3, 3, 3, 2, 2, 3, 3, 3, 3, 3, 3, 2, 2, 3, 3, 3, 3, 3, 3, 2, 2, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 3, 3, 3, 3, 3, 3, 2, 2, 3, 3, 3, 3, 3, 3, 2, 2, 3, 3, 3, 3, 3, 3, 2, 2, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4}, {0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4}, {0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4}};
+static const unsigned char SIMILARITY_RGB_LUT[8][256] = {{0, 4, 0, 4, 0, 4, 0, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 0, 4, 0, 4, 0, 4, 0, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 1, 4, 1, 4, 1, 4, 1, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 1, 4, 1, 4, 1, 4, 1, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 1, 4, 1, 4, 1, 4, 1, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 1, 4, 1, 4, 1, 4, 1, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 1, 4, 1, 4, 1, 4, 1, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 1, 4, 1, 4, 1, 4, 1, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4, 2, 4}, {0, 0, 4, 4, 0, 0, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 0, 0, 4, 4, 0, 0, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 1, 1, 4, 4, 1, 1, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 1, 1, 4, 4, 1, 1, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 1, 1, 4, 4, 1, 1, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 1, 1, 4, 4, 1, 1, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 1, 1, 4, 4, 1, 1, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 1, 1, 4, 4, 1, 1, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4, 2, 2, 4, 4}, {0, 0, 0, 0, 4, 4, 4, 4, 0, 0, 0, 0, 4, 4, 4, 4, 2, 2, 2, 2, 4, 4, 4, 4, 2, 2, 2, 2, 4, 4, 4, 4, 2, 2, 2, 2, 4, 4, 4, 4, 2, 2, 2, 2, 4, 4, 4, 4, 2, 2, 2, 2, 4, 4, 4, 4, 2, 2, 2, 2, 4, 4, 4, 4, 1, 1, 1, 1, 4, 4, 4, 4, 1, 1, 1, 1, 4, 4, 4, 4, 2, 2, 2, 2, 4, 4, 4, 4, 2, 2, 2, 2, 4, 4, 4, 4, 2, 2, 2, 2, 4, 4, 4, 4, 2, 2, 2, 2, 4, 4, 4, 4, 2, 2, 2, 2, 4, 4, 4, 4, 2, 2, 2, 2, 4, 4, 4, 4, 1, 1, 1, 1, 4, 4, 4, 4, 1, 1, 1, 1, 4, 4, 4, 4, 2, 2, 2, 2, 4, 4, 4, 4, 2, 2, 2, 2, 4, 4, 4, 4, 2, 2, 2, 2, 4, 4, 4, 4, 2, 2, 2, 2, 4, 4, 4, 4, 2, 2, 2, 2, 4, 4, 4, 4, 2, 2, 2, 2, 4, 4, 4, 4, 1, 1, 1, 1, 4, 4, 4, 4, 1, 1, 1, 1, 4, 4, 4, 4, 2, 2, 2, 2, 4, 4, 4, 4, 2, 2, 2, 2, 4, 4, 4, 4, 2, 2, 2, 2, 4, 4, 4, 4, 2, 2, 2, 2, 4, 4, 4, 4, 2, 2, 2, 2, 4, 4, 4, 4, 2, 2, 2, 2, 4, 4, 4, 4}, {0, 2, 2, 2, 0, 2, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 1, 2, 2, 2, 1, 2, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 1, 2, 2, 2, 1, 2, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 1, 2, 2, 2, 1, 2, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4}, {0, 2, 0, 2, 2, 2, 2, 2, 1, 2, 1, 2, 2, 2, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 1, 2, 1, 2, 2, 2, 2, 2, 1, 2, 1, 2, 2, 2, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4}, {0, 0, 2, 2, 2, 2, 2, 2, 1, 1, 2, 2, 2, 2, 2, 2, 1, 1, 2, 2, 2, 2, 2, 2, 1, 1, 2, 2, 2, 2, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4}, {0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4}, {0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4}};
 /**
  * \brief Precompute response maps for a spread quantized image.
  *
@@ -2528,11 +2363,11 @@ void computeResponseMapsRGB(const Mat& src, std::vector<Mat>& response_maps)
 	//uchar tableRGB8[8][8] = {{4,0,0,3,3,0,2,2}, {0,4,0,3,0,3,2,2}, {0,0,4,0,3,3,2,2}, {3,3,0,4,1,1,2,2}, {3,0,3,1,4,1,2,2}, {0,3,3,1,1,4,2,2}, {1,1,1,2,2,2,4,0}, {1,1,1,2,2,2,0,4}};
 	
 	//rg, rb, gb abbassati a 1
-	uchar tableRGB8[8][8] = {{4,0,0,1,1,0,2,2}, {0,4,0,1,0,1,2,2}, {0,0,4,0,1,1,2,2}, {2,2,0,4,1,1,2,2}, {2,0,2,1,4,1,2,2}, {0,2,2,1,1,4,2,2}, {1,1,1,1,1,1,4,0}, {1,1,1,1,1,1,0,4}};
+	//uchar tableRGB8[8][8] = {{4,0,0,1,1,0,2,2}, {0,4,0,1,0,1,2,2}, {0,0,4,0,1,1,2,2}, {2,2,0,4,1,1,2,2}, {2,0,2,1,4,1,2,2}, {0,2,2,1,1,4,2,2}, {1,1,1,1,1,1,4,0}, {1,1,1,1,1,1,0,4}};
 	
 	
 	//abbassati
-	//uchar tableRGB[8][8] = {{4,0,0,2,2,0,1,1}, {0,4,0,2,0,2,1,1}, {0,0,4,0,2,2,1,1}, {2,2,0,4,1,1,1,1}, {2,0,2,1,4,1,1,1}, {0,2,2,1,1,4,1,1}, {1,1,1,2,2,2,4,0}, {1,1,1,2,2,2,0,4}};
+	uchar tableRGB8[8][8] = {{4,0,0,2,2,0,1,1}, {0,4,0,2,0,2,1,1}, {0,0,4,0,2,2,1,1}, {2,2,0,4,1,1,1,1}, {2,0,2,1,4,1,1,1}, {0,2,2,1,1,4,1,1}, {1,1,1,2,2,2,4,0}, {1,1,1,2,2,2,0,4}};
 	//abbassati e nero e bianco penalizzati
 	//uchar tableRGB[8][8] = {{4,0,0,2,2,0,1,1}, {0,4,0,2,0,2,1,1}, {0,0,4,0,2,2,1,1}, {2,2,0,4,1,1,1,1}, {2,0,2,1,4,1,1,1}, {0,2,2,1,1,4,1,1}, {0,0,0,1,1,1,4,0}, {0,0,0,1,1,1,0,4}};
 	//abbassati e nero e bianco penalizzatiSSIMI
@@ -2588,7 +2423,7 @@ void computeResponseMapsRGB(const Mat& src, std::vector<Mat>& response_maps)
 		if(ori == 6 || ori == 7)
 		{
 		    if(punteggio16 == true)
-			response_maps[ori].at<uchar>(r,c) = 4; //valore forfettario per matchare bianco e nero con grigio
+			response_maps[ori].at<uchar>(r,c) = 8; //valore forfettario per matchare bianco e nero con grigio
 		    else
 			response_maps[ori].at<uchar>(r,c) = 2; //valore forfettario per matchare bianco e nero con grigio
 		}
@@ -2878,8 +2713,8 @@ void similarity(const std::vector<Mat>& linear_memories, const Template& templ,
 #endif
 #endif
 
-haveSSE2 = false;
-haveSSE3 = false;
+//haveSSE2 = false;
+//haveSSE3 = false;
 
   // Compute the similarity measure for this template by accumulating the contribution of
   // each feature
@@ -3006,19 +2841,37 @@ void similarityRGB(const std::vector<Mat>& linear_memories, const std::vector<Ma
   volatile bool haveSSE2 = checkHardwareSupport(CV_CPU_SSE2);
   volatile bool haveSSE3 = checkHardwareSupport(CV_CPU_SSE3);
 //#endif
-haveSSE2 = false;
-haveSSE3 = false;
+//haveSSE2 = false;
+//haveSSE3 = false;
   // Compute the similarity measure for this template by accumulating the contribution of
   // each feature
 Timer extract_timer;
 	extract_timer.start();
 
-  for (int i = 0; i < (int)templ.features.size(); ++i)
+  int total_features_size;
+  std::vector<cv::my_linemod::Feature> total_features;
+  
+  total_features_size = (int)templ.features.size();
+  total_features.insert(total_features.end(), templ.features.begin(), templ.features.end());
+  
+  //offset che indica se stiamo ancora valutando le feature normali o solo quelle della signature, in tal caso dobbiamo solo svolgere la parte RGB
+  int offsetEndNormalFeatures = total_features_size;
+  
+  if(featuresSignatureCandidates == true)
   {
+      total_features_size += (int)templ.featuresSignature.size();
+      total_features.insert(total_features.end(), templ.featuresSignature.begin(), templ.featuresSignature.end());
+  }
+  
+  for (int i = 0; i < total_features_size; ++i)
+  {
+    bool onlyFeatureSignature = false;
+    if(i >= offsetEndNormalFeatures)
+	onlyFeatureSignature = true;
 	
     // Add the linear memory at the appropriate offset computed from the location of
     // the feature in the template
-    Feature f = templ.features[i];
+    Feature f = total_features[i];
     // Discard feature if out of bounds
     
     
@@ -3027,7 +2880,9 @@ Timer extract_timer;
     if (f.x < 0 || f.x >= size.width || f.y < 0 || f.y >= size.height)
       continue;
     
-    const uchar* lm_ptr = accessLinearMemory(linear_memories, f, T, W);
+    const uchar* lm_ptr;
+    if(onlyFeatureSignature == false)
+	lm_ptr = accessLinearMemory(linear_memories, f, T, W);
     const uchar* lm_ptr_rgb = accessLinearMemoryRGB(linear_memories_rgb, f, T, W);
    
     
@@ -3054,7 +2909,7 @@ if(use63 == true && punteggio16 == false && featuresSignatureCandidates == false
 	#if CV_SSE3
     if (haveSSE3)
     {
-	
+    
       // LDDQU may be more efficient than MOVDQU for unaligned load of next 16 responses
       for ( ; j < template_positions - 15; j += 16)
       {
@@ -3096,11 +2951,32 @@ else //if we are working with more than 63 features !!!!!!!!!!!!!!!!!!!!AGGIUNGE
     if (haveSSE3)
     {
       // LDDQU may be more efficient than MOVDQU for unaligned load of next 16 responses
-      for ( ; j < template_positions - 7; j += 8)
+      for ( ; j < template_positions - 15; j += 16)
       {
-        __m128i responses = _mm_lddqu_si128(reinterpret_cast<const __m128i*>(lm_ptr + j));
-        __m128i* dst_ptr_sse = reinterpret_cast<__m128i*>(dst_ptr_ushort + j);
-        *dst_ptr_sse = _mm_add_epi16(*dst_ptr_sse, responses);
+	
+	if(onlyFeatureSignature == false)
+	{
+	    __m128i v_aligned = _mm_lddqu_si128(reinterpret_cast<const __m128i*>(lm_ptr + j));
+	    __m128i v_alignedLo = _mm_unpacklo_epi8(v_aligned, _mm_setzero_si128());
+	    __m128i v_alignedHi = _mm_unpackhi_epi8(v_aligned, _mm_setzero_si128());
+	    
+	    __m128i* dst_ptr_sse = reinterpret_cast<__m128i*>(dst_ptr_ushort + j);
+	    
+	    dst_ptr_sse[0] = _mm_add_epi16(dst_ptr_sse[0], v_alignedLo);
+	    dst_ptr_sse[1] = _mm_add_epi16(dst_ptr_sse[1], v_alignedHi);
+	} 
+	
+	
+	__m128i v_aligned_rgb = _mm_lddqu_si128(reinterpret_cast<const __m128i*>(lm_ptr_rgb + j));
+	__m128i v_alignedLo_rgb = _mm_unpacklo_epi8(v_aligned_rgb, _mm_setzero_si128());
+	__m128i v_alignedHi_rgb = _mm_unpackhi_epi8(v_aligned_rgb, _mm_setzero_si128());
+
+	__m128i* dst_ptr_rgb_sse = reinterpret_cast<__m128i*>(dst_ptr_rgb_ushort + j);
+	
+	dst_ptr_rgb_sse[0] = _mm_add_epi16(dst_ptr_rgb_sse[0], v_alignedLo_rgb);
+	dst_ptr_rgb_sse[1] = _mm_add_epi16(dst_ptr_rgb_sse[1], v_alignedHi_rgb);
+	  
+
       }
     }
     else
@@ -3108,11 +2984,31 @@ else //if we are working with more than 63 features !!!!!!!!!!!!!!!!!!!!AGGIUNGE
     if (haveSSE2)
     {
       // Fall back to MOVDQU
-      for ( ; j < template_positions - 7; j += 8)
+      for ( ; j < template_positions - 15; j += 16)
       {
-        __m128i responses = _mm_loadu_si128(reinterpret_cast<const __m128i*>(lm_ptr + j));
-        __m128i* dst_ptr_sse = reinterpret_cast<__m128i*>(dst_ptr_ushort + j);
-        *dst_ptr_sse = _mm_add_epi16(*dst_ptr_sse, responses);
+	    if(onlyFeatureSignature == false)
+	    {
+		__m128i v_aligned = _mm_loadu_si128(reinterpret_cast<const __m128i*>(lm_ptr + j));
+		__m128i v_alignedLo = _mm_unpacklo_epi8(v_aligned, _mm_setzero_si128());
+		__m128i v_alignedHi = _mm_unpackhi_epi8(v_aligned, _mm_setzero_si128());
+		
+		__m128i* dst_ptr_sse = reinterpret_cast<__m128i*>(dst_ptr_ushort + j);
+		
+		dst_ptr_sse[0] = _mm_add_epi16(dst_ptr_sse[0], v_alignedLo);
+		dst_ptr_sse[1] = _mm_add_epi16(dst_ptr_sse[1], v_alignedHi);
+	    }
+	    
+	    
+	    __m128i v_aligned_rgb = _mm_loadu_si128(reinterpret_cast<const __m128i*>(lm_ptr_rgb + j));
+	    __m128i v_alignedLo_rgb = _mm_unpacklo_epi8(v_aligned_rgb, _mm_setzero_si128());
+	    __m128i v_alignedHi_rgb = _mm_unpackhi_epi8(v_aligned_rgb, _mm_setzero_si128());
+
+	    __m128i* dst_ptr_rgb_sse = reinterpret_cast<__m128i*>(dst_ptr_rgb_ushort + j);
+	
+	    dst_ptr_rgb_sse[0] = _mm_add_epi16(dst_ptr_rgb_sse[0], v_alignedLo_rgb);
+	    dst_ptr_rgb_sse[1] = _mm_add_epi16(dst_ptr_rgb_sse[1], v_alignedHi_rgb);
+        
+
       }
     }
 #endif
@@ -3120,7 +3016,6 @@ else //if we are working with more than 63 features !!!!!!!!!!!!!!!!!!!!AGGIUNGE
 
 
 	//if(DEBUGGING) std::cout<<"j: "<<j<<" - template_postions: "<<template_positions<<std::endl;
-
 
 	if(use63 == true && punteggio16 == false && featuresSignatureCandidates == false)
 	{
@@ -3140,107 +3035,23 @@ else //if we are working with more than 63 features !!!!!!!!!!!!!!!!!!!!AGGIUNGE
 	{
 		for ( ; j < template_positions; ++j)
 		{
-		    
+		    if(onlyFeatureSignature == false)
 			dst_ptr_ushort[j] += lm_ptr[j];
-			dst_ptr_rgb_ushort[j] += lm_ptr_rgb[j];
+		    dst_ptr_rgb_ushort[j] += lm_ptr_rgb[j];
 		}
 		
 	//	if(DEBUGGING) std::cout<<std::endl<<"i: "<<i<<" - lm_ptr[j]: "<<lm_ptr[j]<<std::endl;
 	}
 	
 	//if(DEBUGGING) std::cout<<std::endl<<"j: "<<i<<" - lm_ptr[j]: "<<lm_ptr[j]<<std::endl;
-    
+
     
   }
- /* for(int hg = 0; hg <dst_rgb.rows*dst_rgb.cols; hg++)
-  {
-      std::cout<<"dst_ptr_ushort:"<<(int)dst_ptr_uchar[hg]<<std::endl;
-    std::cout<<"dst_rgb:"<<(int)dst_ptr_rgb_uchar[hg]<<std::endl;
-  }*/
+
   extract_timer.stop();
-	//if(DEBUGGING) std::cout<<"tempo impiegato: "<<extract_timer.time()<<std::endl;
-	
-	//if(saveJ == template_positions)
-		//if(DEBUGGING) std::cout<<"CI SONO STATE SOLO SSE: tempo impiegato: "<<extract_timer.time()<<std::endl;
+
   
-  /*if(DEBUGGING) std::cout<<"matrice 16U: "<<dst<<std::endl;
-    if(use63 == true)
-		if(DEBUGGING) std::cout<<"dts_ptr[0]: "<<(int)dst_ptr_uchar[0]<<std::endl;
-    else
-		if(DEBUGGING) std::cout<<"dts_ptr[0]: "<<(int)dst_ptr_ushort[0]<<std::endl;
-    if(use63 == true)
-		if(DEBUGGING) std::cout<<"dts_ptr[1]: "<<(int)dst_ptr_uchar[1]<<std::endl;
-    else
-		if(DEBUGGING) std::cout<<"dts_ptr[1]: "<<(int)dst_ptr_ushort[1]<<std::endl;
-		*/
-  
-  if(featuresSignatureCandidates == true)
-  {
-      for (int i = 0; i < (int)templ.featuresSignature.size(); ++i)
-      {
-	    
-	// Add the linear memory at the appropriate offset computed from the location of
-	// the feature in the template
-	Feature f = templ.featuresSignature[i];
-	// Discard feature if out of bounds
-	
-	
-	
-	/// @todo Shouldn't actually see x or y < 0 here?
-	if (f.x < 0 || f.x >= size.width || f.y < 0 || f.y >= size.height)
-	  continue;
-	
-	const uchar* lm_ptr_rgb = accessLinearMemoryRGB(linear_memories_rgb, f, T, W);
-       
-	
-	//QUI COMPARE ERRORE
-	//if(DEBUGGING) std::cout<<std::endl<<"i: "<<i<<" - valore: "<<(int)*lm_ptr/*<<" - indirizzo: "<<static_cast<const void *>(lm_ptr)*/<<std::endl;
-       
-       
-       
-       
-       /* if(DEBUGGING) std::cout<<"template_positions: "<<template_positions<<std::endl;
-	    for(int k = 0; k<template_positions; k++)
-		    if(DEBUGGING) std::cout<<"lm_ptr["<<k<<"]: "<<(int)lm_ptr[k]<<std::endl;
-    */
-
-
-
-	// Now we do an aligned/unaligned add of dst_ptr and lm_ptr with template_positions elements
-	int j = 0;
-
-	    //if(DEBUGGING) std::cout<<"j: "<<j<<" - template_postions: "<<template_positions<<std::endl;
-
-
-	    if(use63 != use63)//HO LASCIATO COSI' PERCHÈ CREDO CHE DEBBA SEMPRE USARE LA UCHORT, POICHÈ AGGIUNGENDO LE FEATURESIGNATURE, LE FEATURE DIVENTERANNO SEMPRE MAGGIORI DI 63
-	    {
-		    for ( ; j < template_positions; ++j)
-		    {
-			    
-			    /*if(lm_ptr_rgb[j] > 0)
-			    {
-				    if(DEBUGGING) std::cout<<"VALORE alla posizione "<<j<<" è: "<<(int)lm_ptr_rgb[j]<<std::endl;
-				    waitKey(0);
-			    }*/
-			    dst_ptr_rgb_uchar[j] += lm_ptr_rgb[j];
-		    }
-	    }
-	    else
-	    {
-		    for ( ; j < template_positions; ++j)
-		    {
-			
-			    dst_ptr_rgb_ushort[j] += lm_ptr_rgb[j];
-		    }
-		    
-	    //	if(DEBUGGING) std::cout<<std::endl<<"i: "<<i<<" - lm_ptr[j]: "<<lm_ptr[j]<<std::endl;
-	    }
-	    
-	    //if(DEBUGGING) std::cout<<std::endl<<"j: "<<i<<" - lm_ptr[j]: "<<lm_ptr[j]<<std::endl;
-	
-	
-      }
-    }
+ 
 }
 
 /**
@@ -3279,8 +3090,8 @@ void similarityLocal(const std::vector<Mat>& linear_memories, const Template& te
 #endif
   __m128i* dst_ptr_sse = dst.ptr<__m128i>();
 #endif
-haveSSE2 = false;
-haveSSE3 = false;
+//haveSSE2 = false;
+//haveSSE3 = false;
   for (int i = 0; i < (int)templ.features.size(); ++i)
   {
     Feature f = templ.features[i];
@@ -3345,6 +3156,7 @@ haveSSE3 = false;
 void similarityLocalRGB(const std::vector<Mat>& linear_memories, const std::vector<Mat>& linear_memories_rgb, const Template& templ,
                      Mat& dst, Mat& dst_rgb, Size size, int T, Point center)
 {
+   
     
   // Similar to whole-image similarity() above. This version takes a position 'center'
   // and computes the energy in the 16x16 patch centered on it.
@@ -3353,6 +3165,7 @@ void similarityLocalRGB(const std::vector<Mat>& linear_memories, const std::vect
 
   // Compute the similarity map in a 16x16 patch around center
   int W = size.width / T;
+
   if(use63 == true && punteggio16 == false && featuresSignatureCandidates == false)
   {
 	dst = Mat::zeros(16, 16, CV_8U);
@@ -3363,6 +3176,8 @@ void similarityLocalRGB(const std::vector<Mat>& linear_memories, const std::vect
 	dst = Mat::zeros(16, 16, CV_16U);
 	dst_rgb = Mat::zeros(16, 16, CV_16U);
   }
+
+  
   // Offset each feature point by the requested center. Further adjust to (-8,-8) from the
   // center to get the top-left corner of the 16x16 patch.
   // NOTE: We make the offsets multiples of T to agree with results of the original code.
@@ -3377,20 +3192,43 @@ void similarityLocalRGB(const std::vector<Mat>& linear_memories, const std::vect
 	__m128i* dst_ptr_sse = dst.ptr<__m128i>();
 	__m128i* dst_ptr_rgb_sse = dst_rgb.ptr<__m128i>();
 haveSSE2 = false;
-haveSSE3 = false;
+//haveSSE3 = false;
 //#endif
-int countFeatureLocal = 0;
-  for (int i = 0; i < (int)templ.features.size(); ++i)
+
+
+  int total_features_size;
+  std::vector<cv::my_linemod::Feature> total_features;
+  
+  total_features_size = (int)templ.features.size();
+  total_features.insert(total_features.end(), templ.features.begin(), templ.features.end());
+  //offset che indica se stiamo ancora valutando le feature normali o solo quelle della signature, in tal caso dobbiamo solo svolgere la parte RGB
+  int offsetEndNormalFeatures = total_features_size;
+  
+  if(featuresSignatureCandidates == true)
   {
-    Feature f = templ.features[i];
+      total_features_size += (int)templ.featuresSignature.size();
+      total_features.insert(total_features.end(), templ.featuresSignature.begin(), templ.featuresSignature.end());
+  }
+  
+  for (int i = 0; i < total_features_size; ++i)
+  {
+    bool onlyFeatureSignature = false;
+    if(i >= offsetEndNormalFeatures)
+	onlyFeatureSignature = true;
+	
+    // Add the linear memory at the appropriate offset computed from the location of
+    // the feature in the template
+    Feature f = total_features[i];
+    
     f.x += offset_x;
     f.y += offset_y;
     // Discard feature if out of bounds, possibly due to applying the offset
     if (f.x < 0 || f.y < 0 || f.x >= size.width || f.y >= size.height)
       continue;
-    countFeatureLocal++;
 
-    const uchar* lm_ptr = accessLinearMemory(linear_memories, f, T, W);
+    const uchar* lm_ptr;
+    if(onlyFeatureSignature == false)
+	lm_ptr = accessLinearMemory(linear_memories, f, T, W);
     const uchar* lm_ptr_rgb = accessLinearMemoryRGB(linear_memories_rgb, f, T, W);
 
 
@@ -3399,42 +3237,109 @@ int countFeatureLocal = 0;
 #if CV_SSE2
 #if CV_SSE3
     if (haveSSE3)
-    {
-      // LDDQU may be more efficient than MOVDQU for unaligned load of 16 responses from current row
-      for (int row = 0; row < 16; ++row)
-      {
-        __m128i aligned = _mm_lddqu_si128(reinterpret_cast<const __m128i*>(lm_ptr));
-	__m128i alignedRGB = _mm_lddqu_si128(reinterpret_cast<const __m128i*>(lm_ptr_rgb));
+    { 
+
+	if( use63 == true && punteggio16 == false && featuresSignatureCandidates == false)
+	{
+
+		  
+	      // LDDQU may be more efficient than MOVDQU for unaligned load of 16 responses from current row
+	      for (int row = 0; row < 16; ++row)
+	      {
+		__m128i aligned = _mm_lddqu_si128(reinterpret_cast<const __m128i*>(lm_ptr));
+		__m128i alignedRGB = _mm_lddqu_si128(reinterpret_cast<const __m128i*>(lm_ptr_rgb));
+		
 	
-        dst_ptr_sse[row] = _mm_add_epi8(dst_ptr_sse[row], aligned);
-	dst_ptr_rgb_sse[row] = _mm_add_epi8(dst_ptr_rgb_sse[row], alignedRGB);
-	
-        lm_ptr += W; // Step to next row
-	lm_ptr_rgb += W; // Step to next row
-      }
+		dst_ptr_sse[row] = _mm_add_epi8(dst_ptr_sse[row], aligned);
+		dst_ptr_rgb_sse[row] = _mm_add_epi8(dst_ptr_rgb_sse[row], alignedRGB);
+
+		lm_ptr += W; // Step to next row
+		lm_ptr_rgb += W; // Step to next row
+	      }
+	} 	
+	else
+	{
+	    
+	    // LDDQU may be more efficient than MOVDQU for unaligned load of 16 responses from current row
+	      for (int row = 0; row < 32; row+=2)
+	      {
+		if(onlyFeatureSignature == false)
+		{
+		    __m128i v_aligned = _mm_lddqu_si128(reinterpret_cast<const __m128i*>(lm_ptr));
+		    __m128i v_alignedLo = _mm_unpacklo_epi8(v_aligned, _mm_setzero_si128());
+		    __m128i v_alignedHi = _mm_unpackhi_epi8(v_aligned, _mm_setzero_si128());
+		    
+		    dst_ptr_sse[row] = _mm_add_epi16(dst_ptr_sse[row], v_alignedLo);
+		    dst_ptr_sse[row + 1] = _mm_add_epi16(dst_ptr_sse[row + 1], v_alignedHi);
+		    
+		    lm_ptr += W; // Step to next row
+		}
+		
+		__m128i v_aligned_rgb = _mm_lddqu_si128(reinterpret_cast<const __m128i*>(lm_ptr_rgb));
+		__m128i v_alignedLo_rgb = _mm_unpacklo_epi8(v_aligned_rgb, _mm_setzero_si128());
+		__m128i v_alignedHi_rgb = _mm_unpackhi_epi8(v_aligned_rgb, _mm_setzero_si128());
+
+		dst_ptr_rgb_sse[row] = _mm_add_epi16(dst_ptr_rgb_sse[row], v_alignedLo_rgb);
+		dst_ptr_rgb_sse[row + 1] = _mm_add_epi16(dst_ptr_rgb_sse[row + 1], v_alignedHi_rgb);
+		
+		lm_ptr_rgb += W; // Step to next row
+	      }
+	}
     }
     else
 #endif
     if (haveSSE2)
     {
-      // Fall back to MOVDQU
-      for (int row = 0; row < 16; ++row)
-      {
-	
-	__m128i aligned = _mm_loadu_si128(reinterpret_cast<const __m128i*>(lm_ptr));
-	__m128i alignedRGB = _mm_loadu_si128(reinterpret_cast<const __m128i*>(lm_ptr_rgb));
-	
-        dst_ptr_sse[row] = _mm_add_epi8(dst_ptr_sse[row], aligned);
-	dst_ptr_rgb_sse[row] = _mm_add_epi8(dst_ptr_rgb_sse[row], alignedRGB);
-	
-        lm_ptr += W; // Step to next row
-	lm_ptr_rgb += W; // Step to next row
-      }
+
+	if(use63 == true && punteggio16 == false && featuresSignatureCandidates == false)
+	  {
+	      // Fall back to MOVDQU
+	      for (int row = 0; row < 16; ++row)
+	      {
+		
+		__m128i aligned = _mm_loadu_si128(reinterpret_cast<const __m128i*>(lm_ptr));
+		__m128i alignedRGB = _mm_loadu_si128(reinterpret_cast<const __m128i*>(lm_ptr_rgb));
+		
+		dst_ptr_sse[row] = _mm_add_epi8(dst_ptr_sse[row], aligned);
+		dst_ptr_rgb_sse[row] = _mm_add_epi8(dst_ptr_rgb_sse[row], alignedRGB);
+		
+		lm_ptr += W; // Step to next row
+		lm_ptr_rgb += W; // Step to next row
+	      }
+	}
+	else
+	{
+	    // Fall back to MOVDQU
+	      for (int row = 0; row < 32; row+=2)
+	      {
+		if(onlyFeatureSignature == false)
+		{
+		    __m128i v_aligned = _mm_loadu_si128(reinterpret_cast<const __m128i*>(lm_ptr));
+		    __m128i v_alignedLo = _mm_unpacklo_epi8(v_aligned, _mm_setzero_si128());
+		    __m128i v_alignedHi = _mm_unpackhi_epi8(v_aligned, _mm_setzero_si128());
+		    
+		    dst_ptr_sse[row] = _mm_add_epi16(dst_ptr_sse[row], v_alignedLo);
+		    dst_ptr_sse[row + 1] = _mm_add_epi16(dst_ptr_sse[row + 1], v_alignedHi);
+		    
+		    lm_ptr += W; // Step to next row
+		}
+				
+		__m128i v_aligned_rgb = _mm_loadu_si128(reinterpret_cast<const __m128i*>(lm_ptr_rgb));
+		__m128i v_alignedLo_rgb = _mm_unpacklo_epi8(v_aligned_rgb, _mm_setzero_si128());
+		__m128i v_alignedHi_rgb = _mm_unpackhi_epi8(v_aligned_rgb, _mm_setzero_si128());
+
+		dst_ptr_rgb_sse[row] = _mm_add_epi16(dst_ptr_rgb_sse[row], v_alignedLo_rgb);
+		dst_ptr_rgb_sse[row + 1] = _mm_add_epi16(dst_ptr_rgb_sse[row + 1], v_alignedHi_rgb);
+		
+		lm_ptr_rgb += W; // Step to next row
+	      }
+	}
     }
     else
 #endif
 
     {
+
 	  if(use63 == true && punteggio16 == false && featuresSignatureCandidates == false)
 	  {
 		  uchar* dst_ptr = dst.ptr<uchar>();
@@ -3445,7 +3350,7 @@ int countFeatureLocal = 0;
 			{
 			  dst_ptr[col] += lm_ptr[col];
 			  dst_ptr_rgb[col] += lm_ptr_rgb[col];
-		    }
+			}
 			dst_ptr += 16;
 			lm_ptr += W;
 			dst_ptr_rgb += 16;
@@ -3454,73 +3359,36 @@ int countFeatureLocal = 0;
 	  }
 	  else
 	  {
+	      if(onlyFeatureSignature == false)
+	      {
 		  ushort* dst_ptr = dst.ptr<ushort>();
-		  ushort* dst_ptr_rgb = dst_rgb.ptr<ushort>();
 		  for (int row = 0; row < 16; ++row)
 		  {
 			for (int col = 0; col < 16; ++col)
-			{
 			  dst_ptr[col] += lm_ptr[col];
-			  dst_ptr_rgb[col] += lm_ptr_rgb[col];
-			}
+			  
 			dst_ptr += 16;
 			lm_ptr += W;
-			dst_ptr_rgb += 16;
-			lm_ptr_rgb += W;
 		  }
+	      }
+		
+		  
+	      ushort* dst_ptr_rgb = dst_rgb.ptr<ushort>();
+	      for (int row = 0; row < 16; ++row)
+	      {
+		    for (int col = 0; col < 16; ++col)
+		      dst_ptr_rgb[col] += lm_ptr_rgb[col];
+		    
+		    dst_ptr_rgb += 16;
+		    lm_ptr_rgb += W;
+	      }
 	  }
       
     }
-  }
-  
-  if(featuresSignatureCandidates == true)
-  {
-      for (int i = 0; i < (int)templ.featuresSignature.size(); ++i)
-      {
-	Feature f = templ.featuresSignature[i];
-	f.x += offset_x;
-	f.y += offset_y;
-	// Discard feature if out of bounds, possibly due to applying the offset
-	if (f.x < 0 || f.y < 0 || f.x >= size.width || f.y >= size.height)
-	  continue;
-	countFeatureLocal++;
-
-	const uchar* lm_ptr_rgb = accessLinearMemoryRGB(linear_memories_rgb, f, T, W);
-
-
-	// Process whole row at a time if vectorization possible
-
     
-	      if(use63 == true && punteggio16 == false && featuresSignatureCandidates == false)
-	      {
-		      uchar* dst_ptr_rgb = dst_rgb.ptr<uchar>();
-		      for (int row = 0; row < 16; ++row)
-		      {
-			    for (int col = 0; col < 16; ++col)
-			    {
-			      dst_ptr_rgb[col] += lm_ptr_rgb[col];
-			}
-			    dst_ptr_rgb += 16;
-			    lm_ptr_rgb += W;
-		      }
-	      }
-	      else
-	      {
-		      ushort* dst_ptr_rgb = dst_rgb.ptr<ushort>();
-		      for (int row = 0; row < 16; ++row)
-		      {
-			    for (int col = 0; col < 16; ++col)
-			    {
-			      dst_ptr_rgb[col] += lm_ptr_rgb[col];
-			    }
-			    dst_ptr_rgb += 16;
-			    lm_ptr_rgb += W;
-		      }
-	      }
-	  
-	
-      }
   }
+  //cout<<"local esce prima parte"<<endl;
+
   //if(DEBUGGING) std::cout<<"dst16x16:"<<std::endl<<dst<<std::endl;
     //  if(DEBUGGING) std::cout<<"feature in local similarity: "<<countFeatureLocal<<std::endl;
 }
@@ -3735,60 +3603,7 @@ void Detector::match(const std::vector<Mat>& sources, float threshold, std::vect
 
 
 
-    //WRITE DEBUG
-/*      string filenameDebug;
-      std::stringstream ss;
-      string s;
-      ss << countStatic;
-      ss >> s;
-      filenameDebug = "./debug/responseMap_"+s+".yaml";
-    
-      countStatic++;
-
-      cv::FileStorage fs(filenameDebug, cv::FileStorage::WRITE);
-      for(int h = 0; h<8; h++)
-      {
-	  Mat resp = response_maps[h];
-	  std::stringstream ss2;
-	  ss2 << h;
-	  string nResp;
-	  ss2 >> nResp;
-	  string title = "response"+nResp;
-	  fs << title << resp;
-      }
-    
-      */
-     /* imshow("spreaded_source", spread_quantized_rgb);
-    imshow("response map[0] (R)", response_maps_rgb[0]);
-    imshow("response map[1] (G)", response_maps_rgb[1]);
-    imshow("response map[2] (B)", response_maps_rgb[2]);
-    imshow("response map[3] (RG)", response_maps_rgb[3]);
-    imshow("response map[4] (RB)", response_maps_rgb[4]);
-    imshow("response map[5] (GB)", response_maps_rgb[5]);
-    imshow("response map[6] (rgb white)", response_maps_rgb[6]);
-    imshow("response map[7] (rgb black)", response_maps_rgb[7]);
-    waitKey(0);*/
-	//if(DEBUGGING) std::cout<<"dopo la chiamata responseMap[0]: "<<response_maps[0]<<std::endl;
-	
-	/*
-	if(DEBUGGING) std::cout<<"type:"<<spread_quantized.elemSize()<<std::endl;
-	if(DEBUGGING) std::cout<<"CV_8U:"<<CV_8U<<std::endl;
-	for(int r = 0; r<spread_quantized.rows; r++)
-		for(int c = 0; c<spread_quantized.cols; c++)
-			if(((int)spread_quantized.at<uchar>(r,c))>0)
-			{
-				if(DEBUGGING) std::cout<<"spread_quantized["<<r<<"]["<<c<<"]: "<<(int)(spread_quantized.at<unsigned char>(r,c))<<std::endl;
-				for(int k = 0; k<8; k++)
-					if(DEBUGGING) std::cout<<"response_maps["<<k<<"]["<<r<<"]["<<c<<"]: "<<(int)(response_maps[k].at<unsigned char>(r,c))<<std::endl;
-				//if(DEBUGGING) std::cout<<"spread_quantized:"<<spread_quantized<<std::endl;
-			}
-			else
-			{
-				if(DEBUGGING) std::cout<<"caso 0"<<std::endl;
-				for(int k = 0; k<8; k++)
-					if(DEBUGGING) std::cout<<"response_maps["<<k<<"]["<<r<<"]["<<c<<"]: "<<(int)(response_maps[k].at<unsigned char>(r,c))<<std::endl;
-			}
-      */
+ 
       LinearMemories& memories = lm_level[i];
       LinearMemories& memories_rgb = lm_level_rgb[i];
       
@@ -3797,80 +3612,14 @@ void Detector::match(const std::vector<Mat>& sources, float threshold, std::vect
         linearize(response_maps[j], memories[j], T);
         linearize(response_maps_rgb[j], memories_rgb[j], T);
       }
-	
-    /* string filenameDebug;
-      std::stringstream ss;
-      string s;
-      ss << countStatic;
-      ss >> s;
-      filenameDebug = "./debug/responseMap_"+s+".yaml";
-    
-      countStatic++;
-    //WRITE DEBUG
-     cv::FileStorage fs(filenameDebug, cv::FileStorage::WRITE);
-      for(int h = 0; h<8; h++)
-      {
-	  Mat resp = (Mat)memories[h];
-	  std::stringstream ss2;
-	  ss2 << h;
-	  string nResp;
-	  ss2 >> nResp;
-	  string title = "response"+nResp;
-	  fs << title << resp;
-      }
-    
-    
-    
-    
-    
-    
-    //READ DEBUG
-    string filenameResult = "./debug/res.yaml";
-    cv::FileStorage fs(filenameDebug, cv::FileStorage::READ);
-    for(int h = 0; h<8; h++)
-    {
-	  cv::Mat resp = (Mat)memories[h];
-	  std::stringstream ss2;
-	  ss2 << h;
-	  string nResp;
-	  ss2 >> nResp;
-	  string title = "response"+nResp;
-	  cv::Mat testMat;
-	  fs[title] >> testMat;
-	  
-	  cv::Mat image;
-	  cv::compare(resp, testMat , image, CMP_NE);
-	  
-	  int nonZero = countNonZero(image);
-	  if(nonZero != 0)
-	  {
-	    cv::FileStorage fsResult(filenameResult, cv::FileStorage::APPEND);
-	    fsResult << "responseMap_" + s + "_" + title << nonZero;
-	    fsResult.release();
-	  }
-    }*/
+
 	
 	  
       if (quantized_images.needed()) //use copyTo here to side step reference semantics.
         quantized.copyTo(quantized_images.getMatRef(static_cast<int>(l*quantizers.size() + i)));
     }
     
-    /*
-    if(DEBUGGING) std::cout<<"response_maps.size(): "<<response_maps.size()<<std::endl;
-    if(onlyOne == true && countStatic == 1)
-    {
-	for(int po = 0; po < response_maps.size(); po++)
-	{
-	    if(DEBUGGING) std::cout<<"response_maps["<<po<<"] : "<<response_maps[po]<<std::endl;
-	}
-	onlyOne = false;
-    }
-    else
-    {
-	if(DEBUGGING) std::cout<<"countStatic: "<<countStatic<<std::endl;
 
-    }
-    countStatic++;*/
     
     sizes.push_back(quantized.size());
   }
@@ -3909,7 +3658,6 @@ void Detector::match(const std::vector<Mat>& sources, float threshold, std::vect
   
   
   //waitKey();
-  //matchInside(matches);  
   std::vector<Match>::iterator new_end = std::unique(matches.begin(), matches.end());
   matches.erase(new_end, matches.end());
   
@@ -4023,44 +3771,7 @@ struct MatchPredicateRGB
 };
 
 
-void Detector::matchInside(std::vector<Match> matches) const
-{
-    //imshow("magnitude MatchINSIDE", magnitude);
-    //waitKey();
-    for (int i = 0; (i < (int)matches.size()); ++i)
-    {
-      cv::my_linemod::Match m = matches[i];
-      int templateId = m.template_id;
-      vector<cv::my_linemod::Template> templatesMatched = getTemplates(m.class_id.c_str(), templateId);
-      for (int i = 0; i < (int)templatesMatched[0].features.size(); ++i)
-      {
-        cv::my_linemod::Feature f = templatesMatched[0].features[i];
-      }
-  }
-/*      for(int j = 0; j< templatesMatched.size(); j++)
-      {
-	  
-      }
-  */  
-    
-    
-    /*  if (class_ids.empty())
-      {
-	// Match all templates
-	TemplatesMap::const_iterator it = class_templates.begin(), itend = class_templates.end();
-	for ( ; it != itend; ++it)
-	{
-	    std::vector<TemplatePyramid> tempPyr = it->second;
-	    if(DEBUGGING) std::cout<<"tempPyr.size: "<<tempPyr.size()<<std::endl;
-	    if(DEBUGGING) std::cout<<"tempPyr->second.size: "<<tempPyr[0].size()<<std::endl;
-	    Template tmp1 = tempPyr[0][0];
-	    Template tmp2 = tempPyr[0][1];
-	    if(DEBUGGING) std::cout<<"temp1: "<<tmp1.totalFeatures<<std::endl;
-	    if(DEBUGGING) std::cout<<"temp2: "<<tmp2.totalFeatures<<std::endl;
-	    
-	}
-      }*/
-}
+
 
 
 void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
@@ -4285,6 +3996,7 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
 	    
 	    //HO INVERTITO SCORE_RGB CON SCORE!!!!!!!!!!!!!!!!!!!
 	    
+	    //if (score > best_score)
 	    if (score_combined > best_score)
             {
 		//if((score_rgb >= threshold && score >= threshold -5) || (score >= threshold && score_rgb >= threshold -5))
@@ -4317,6 +4029,9 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
       std::vector<Match>::iterator new_end_rgb = std::remove_if(candidates.begin(), candidates.end(),
                                                             MatchPredicateRGB(threshold));
       candidates.erase(new_end_rgb, candidates.end());
+      
+      
+      
 
 //for(int h = 0; h<candidates.size(); h++)
 //	if(DEBUGGING) std::cout<<"score candidates["<<h<<"] DOPO IL REFINEMENT: "<<candidates[h].similarity<<"template.id: "<<candidates[h].template_id<<std::endl;                                                     
@@ -4398,61 +4113,68 @@ int Detector::addTemplate(const std::vector<Mat>& sources, const std::string& cl
     
     int countLabels [8] = {0,0,0,0,0,0,0,0};
     int countContours = 0;
-      for (int j = 0; j < (int)tp[l*num_modalities + i].features.size(); ++j)
+    if(DEBUGGING)
+    {
+        for (int j = 0; j < (int)tp[l*num_modalities + i].features.size(); ++j)
 	{
 	  cv::my_linemod::Feature f = tp[l*num_modalities + i].features[j];
 	  countLabels[f.rgbLabel]++;
 	  if(f.onBorder)
 	    countContours++;
 	}
-	if(DEBUGGING) std::cout<<"features count:"<<std::endl;
-	if(DEBUGGING) std::cout<<"TOTALI: "<<(int)tp[l*num_modalities + i].features.size()<<"- SUL CONTORNO: "<<countContours<<std::endl;
-	
-  Mat tmp2(480, 640, CV_8UC3, Scalar(200, 200, 200));
-  for(int k = 0; k<(int)tp[l*num_modalities + i].features.size(); k++)
+	std::cout<<"features count:"<<std::endl;
+	std::cout<<"TOTALI: "<<(int)tp[l*num_modalities + i].features.size()<<"- SUL CONTORNO: "<<countContours<<std::endl;
+    }
+ 
+  if(DEBUGGING)
   {
-      cv::Scalar colorT;
-	  cv::my_linemod::Feature f = tp[l*num_modalities + i].features[k];
-	  switch(f.rgbLabel)
-	  {
-	  case 0: colorT = CV_RGB(255,0,0); break;
-	  case 1: colorT = CV_RGB(0,255,0); break;
-	  case 2: colorT = CV_RGB(0,0,255); break;
-	  case 3: colorT = CV_RGB(255,255,0); break;
-	  case 4: colorT = CV_RGB(255,0,255); break;
-	  case 5: colorT = CV_RGB(0,255,255); break;
-	  case 6: colorT = CV_RGB(255,255,255); break;
-	  case 7: colorT = CV_RGB(0,0,0); break;
-	  }
-	  cv::circle(tmp2, Point(f.x,f.y), 2, colorT);
-	  //if(DEBUGGING) std::cout<<"y: "<<f.y<<std::endl;
+      Mat tmp2(480, 640, CV_8UC3, Scalar(200, 200, 200));
+      for(int k = 0; k<(int)tp[l*num_modalities + i].features.size(); k++)
+      {
+	  cv::Scalar colorT;
+	      cv::my_linemod::Feature f = tp[l*num_modalities + i].features[k];
+	      switch(f.rgbLabel)
+	      {
+	      case 0: colorT = CV_RGB(255,0,0); break;
+	      case 1: colorT = CV_RGB(0,255,0); break;
+	      case 2: colorT = CV_RGB(0,0,255); break;
+	      case 3: colorT = CV_RGB(255,255,0); break;
+	      case 4: colorT = CV_RGB(255,0,255); break;
+	      case 5: colorT = CV_RGB(0,255,255); break;
+	      case 6: colorT = CV_RGB(255,255,255); break;
+	      case 7: colorT = CV_RGB(0,0,0); break;
+	      }
+	      cv::circle(tmp2, Point(f.x,f.y), 2, colorT);
+	      //if(DEBUGGING) std::cout<<"y: "<<f.y<<std::endl;
+      }
   }
   //imshow("template added",tmp2);
   //waitKey(0);
 	
-	
-      for (int j = 0; j < 8; ++j)
+      if(DEBUGGING)
       {
-	if(j == 0)
-	    if(DEBUGGING) std::cout<<"R: "<<countLabels[j]<<std::endl;
-	  if(j == 1)
-	    if(DEBUGGING) std::cout<<"G: "<<countLabels[j]<<std::endl;
-	if(j == 2)
-	    if(DEBUGGING) std::cout<<"B: "<<countLabels[j]<<std::endl;
-	if(j == 3)
-	    if(DEBUGGING) std::cout<<"RG: "<<countLabels[j]<<std::endl;
-	if(j == 4)
-	    if(DEBUGGING) std::cout<<"RB: "<<countLabels[j]<<std::endl;
-	if(j == 5)
-	    if(DEBUGGING) std::cout<<"GB: "<<countLabels[j]<<std::endl;
-	if(j == 6)
-	    if(DEBUGGING) std::cout<<"RGB_WHITE: "<<countLabels[j]<<std::endl;
-	if(j == 7)
-	    if(DEBUGGING) std::cout<<"RGB_BLACK: "<<countLabels[j]<<std::endl;
-	
+	  for (int j = 0; j < 8; ++j)
+	  {
+	    if(j == 0)
+		 std::cout<<"R: "<<countLabels[j]<<std::endl;
+	      if(j == 1)
+		 std::cout<<"G: "<<countLabels[j]<<std::endl;
+	    if(j == 2)
+		 std::cout<<"B: "<<countLabels[j]<<std::endl;
+	    if(j == 3)
+		 std::cout<<"RG: "<<countLabels[j]<<std::endl;
+	    if(j == 4)
+		 std::cout<<"RB: "<<countLabels[j]<<std::endl;
+	    if(j == 5)
+		 std::cout<<"GB: "<<countLabels[j]<<std::endl;
+	    if(j == 6)
+		 std::cout<<"RGB_WHITE: "<<countLabels[j]<<std::endl;
+	    if(j == 7)
+		 std::cout<<"RGB_BLACK: "<<countLabels[j]<<std::endl;
+	    
+	  }
+	  std::cout<<std::endl;
       }
-      if(DEBUGGING) std::cout<<std::endl;
-      
       if (!success)
         return -1;
     }

@@ -24,7 +24,7 @@ public:
 //ogni vettore deve avere almeno un elemento
 
 	v_use63.push_back(true);
-	//v_use63.push_back(false);
+	v_use63.push_back(false);
 	
 	v_featuresUsed.push_back(126);
 	
@@ -42,25 +42,25 @@ public:
 	//v_threshold_rgb.push_back(30);
 	//v_threshold_rgb.push_back(35);
 	//v_threshold_rgb.push_back(40);
-	v_threshold_rgb.push_back(45); //trainato
-	v_threshold_rgb.push_back(50); //trainato
-	v_threshold_rgb.push_back(55); //trainato
-	//v_threshold_rgb.push_back(60);
-	//v_threshold_rgb.push_back(65);
+	//v_threshold_rgb.push_back(45); //trainato
+	//v_threshold_rgb.push_back(50); //trainato
+	//v_threshold_rgb.push_back(55); //trainato
+	v_threshold_rgb.push_back(60);//trainato
+	v_threshold_rgb.push_back(65);//trainato
 	
 //////parametri che influenzano solo il matching
 //ogni vettore deve avere almeno un elemento	
-	v_punteggio16.push_back(true);	
+	//v_punteggio16.push_back(true);	
 	v_punteggio16.push_back(false);
 	
-	v_featuresSignatureCandidates.push_back(true);
+	//v_featuresSignatureCandidates.push_back(true);
 	v_featuresSignatureCandidates.push_back(false);
 	
-	v_signatureEnabled.push_back(true);
-	//v_signatureEnabled.push_back(false);
+	//v_signatureEnabled.push_back(true);
+	v_signatureEnabled.push_back(false);
 	
 	
-	v_grayEnabled.push_back(true);
+	//v_grayEnabled.push_back(true);
 	v_grayEnabled.push_back(false);
 	
 	//v_matching_threshold.push_back(75);
@@ -107,11 +107,11 @@ public:
 	
 	actual_signFeat = 30; //default 30
 	
-	actual_threshold_rgb = 50; //default 45
+	actual_threshold_rgb = 55; //default 45
 	
 	//parametri del matching
 	//	
-	actual_punteggio16 = true; //default true
+	actual_punteggio16 = false; //default true
 	
 	actual_featuresSignatureCandidates = true; //default true
 	
@@ -127,9 +127,9 @@ public:
 	if(isConverted == true)
 	    converted = "converted/";
 	
-	cartelleVideo.push_back("video/rgbd-scenes/kitchen_small/kitchen_small_1/" + converted);
-	filesGroundTruth.push_back("/media/TeraDati/HD Manu Clarabella/dataset rgbd/video/rgbd-scenes/kitchen_small/test.hdf5");
-	nomiVideo.push_back("kitchen_small_1");
+	//cartelleVideo.push_back("video/rgbd-scenes/kitchen_small/kitchen_small_1/" + converted);
+	//filesGroundTruth.push_back("/media/TeraDati/HD Manu Clarabella/dataset rgbd/video/rgbd-scenes/kitchen_small/test.hdf5");
+	//nomiVideo.push_back("kitchen_small_1");
 	
 	//cartelleVideo.push_back("video/rgbd-scenes/desk/desk_1/" + converted);
 	//filesGroundTruth.push_back("/media/TeraDati/HD Manu Clarabella/dataset rgbd/video/rgbd-scenes/desk/test_desk_1.hdf5");
@@ -143,9 +143,9 @@ public:
 	//filesGroundTruth.push_back("/media/TeraDati/HD Manu Clarabella/dataset rgbd/video/rgbd-scenes/desk/test_desk_3.hdf5");
 	//nomiVideo.push_back("desk_3");
 	
-	//cartelleVideo.push_back("video/rgbd-scenes/meeting_small/meeting_small_1/" + converted);
-	//filesGroundTruth.push_back("/media/TeraDati/HD Manu Clarabella/dataset rgbd/video/rgbd-scenes/meeting_small/test_meeting.hdf5");
-	//nomiVideo.push_back("meeting_small_1");
+	cartelleVideo.push_back("video/rgbd-scenes/meeting_small/meeting_small_1/" + converted);
+	filesGroundTruth.push_back("/media/TeraDati/HD Manu Clarabella/dataset rgbd/video/rgbd-scenes/meeting_small/test_meeting.hdf5");
+	nomiVideo.push_back("meeting_small_1");
 	
 	//cartelleVideo.push_back("video/rgbd-scenes/table/table_1/" + converted);
 	//filesGroundTruth.push_back("/media/TeraDati/HD Manu Clarabella/dataset rgbd/video/rgbd-scenes/table/test_table.hdf5");
@@ -307,8 +307,17 @@ public:
 	all_categories.erase( unique( all_categories.begin(), all_categories.end() ), all_categories.end() );
 	
 	//PER ADDESTRARE SOLO LE CATEGORIE VOLUTE//
-	//all_categories.clear();
-	//all_categories.push_back(make_pair("flashlight","1"));
+	/*all_categories.clear();
+	all_categories.push_back(make_pair("flashlight","1"));
+	all_categories.push_back(make_pair("flashlight","2"));
+	all_categories.push_back(make_pair("flashlight","3"));
+	all_categories.push_back(make_pair("flashlight","5"));
+	all_categories.push_back(make_pair("soda_can","1"));
+	all_categories.push_back(make_pair("soda_can","3"));
+	all_categories.push_back(make_pair("soda_can","4"));
+	all_categories.push_back(make_pair("soda_can","5"));
+	all_categories.push_back(make_pair("soda_can","6"));
+	*/
 	//////////////////////////////////////////
 	
 	

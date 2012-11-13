@@ -253,11 +253,13 @@ int main(int argc, char * argv[])
 	for(int train3 = 0; train3<v_featuresUsed.size(); train3++)
 	{
 	    //cambio il numero di feature solo se use63 è false
-	    if(actual_use63 == false && trainselected == false)
-		actual_featuresUsed = v_featuresUsed.at(train3);
-	    else //use63 è true
-		actual_featuresUsed = 63;
-	    
+	    if(trainselected== false)
+	    {
+		if(actual_use63 == false)
+		    actual_featuresUsed = v_featuresUsed.at(train3);
+		else //use63 è true
+		    actual_featuresUsed = 63;
+	    }
 	for(int train4 = 0; train4<v_signFeat.size(); train4++)
 	{
 	    if(trainselected == false)
@@ -371,7 +373,7 @@ int main(int argc, char * argv[])
 				    cv::Mat maskFinal;
 				    if(rotationFactor == 1.0)
 				    {
-					singleSourceFinal = singleSourceDst;
+					singleSourceFinal = singleSourceDst.clone();
 					maskFinal = maskDst;
 				    }
 				    else
@@ -393,6 +395,7 @@ int main(int argc, char * argv[])
 				    const std::vector<cv::my_linemod::Template>& templates = detector->getTemplates(class_id, template_id);
 				    if(DEBUGGING == true && iter== 4)
 				    {
+					
 					for (int l = 0; l < (int)templates[0].features.size(); ++l)
 					{
 					  cv::Scalar colorT;
@@ -412,7 +415,7 @@ int main(int argc, char * argv[])
 					 //if(f.onBorder == true)
 					    cv::circle(singleSourceFinal, pt, 2, colorT);
 					}
-					if(DEBUGGING)imshow("color_featured", singleSourceFinal);
+					if(DEBUGGING)imshow("color_featured"+intToString(iterRot), singleSourceFinal);
 					
 					//imwrite("./provaTemplate_can_1.png", singleSourceDst);
 					waitKey(0);
@@ -448,13 +451,13 @@ int main(int argc, char * argv[])
 		cout<<endl<<templateMapName<<" salvato"<<endl;
 		train_timer.stop();
 		cout<<"Train time: "<<train_timer.time()<<endl;
+		if(trainselected == true)
+		    return 0;
 	    }
 		    
 	}		    
 	}
 	}
-	    if(trainselected == true)
-		return 0;
 	}    
 	total_train_timer.stop();
 	cout<<"Whole train time: "<<total_train_timer.time()<<endl;
@@ -507,10 +510,14 @@ int main(int argc, char * argv[])
 	    
     for(int test3 = 0; test3<v_featuresUsed.size(); test3++)
     {
-	//cambio il numero di feature solo se use63 è false
-	if(actual_use63 == false && testselected == false)
-	    actual_featuresUsed = v_featuresUsed.at(test3);
-	    
+	if(testselected == false)
+	{
+	    //cambio il numero di feature solo se use63 è false
+	    if(actual_use63 == false)
+		actual_featuresUsed = v_featuresUsed.at(test3);
+	    else
+		actual_featuresUsed = 63;
+	}
     for(int test4 = 0; test4<v_signFeat.size(); test4++)
     {
 	if(testselected == false)
@@ -610,21 +617,25 @@ int main(int argc, char * argv[])
 	    }
 	    else
 	    {
-		if(cartellaVideo == "video/rgbd-scenes/kitchen_small/kitchen_small_1/")
+		string convertedString = "";
+		if(converted == true)
+		    convertedString = "converted/";
+		    
+		if(cartellaVideo == "video/rgbd-scenes/kitchen_small/kitchen_small_1/" + convertedString)
 		    categoriesToCheck = kitchen_small_1_categories;
-		else if(cartellaVideo == "video/rgbd-scenes/desk/desk_1/")
+		else if(cartellaVideo == "video/rgbd-scenes/desk/desk_1/" + convertedString)
 		    categoriesToCheck = desk_1_categories;
-		else if(cartellaVideo == "video/rgbd-scenes/desk/desk_2/")
+		else if(cartellaVideo == "video/rgbd-scenes/desk/desk_2/" + convertedString)
 		    categoriesToCheck = desk_2_categories;
-		else if(cartellaVideo == "video/rgbd-scenes/desk/desk_3/")
+		else if(cartellaVideo == "video/rgbd-scenes/desk/desk_3/" + convertedString)
 		    categoriesToCheck = desk_3_categories;
-		else if(cartellaVideo == "video/rgbd-scenes/meeting_small/meeting_small_1/")
+		else if(cartellaVideo == "video/rgbd-scenes/meeting_small/meeting_small_1/" + convertedString)
 		    categoriesToCheck = meeting_small_1_categories;
-		else if(cartellaVideo == "video/rgbd-scenes/table/table_1/")
+		else if(cartellaVideo == "video/rgbd-scenes/table/table_1/" + convertedString)
 		    categoriesToCheck = table_1_categories;
-		else if(cartellaVideo == "video/rgbd-scenes/table_small/table_small_1/")
+		else if(cartellaVideo == "video/rgbd-scenes/table_small/table_small_1/" + convertedString)
 		    categoriesToCheck = table_small_1_categories;
-		else if(cartellaVideo == "video/rgbd-scenes/table_small/table_small_2/")
+		else if(cartellaVideo == "video/rgbd-scenes/table_small/table_small_2/" + convertedString)
 		    categoriesToCheck = table_small_2_categories;
 	    }
 	    
@@ -820,6 +831,8 @@ int main(int argc, char * argv[])
 		    if(testselected == true)
 		    {
 			printFalsesResult(videoResult);
+			one_video_loop_timer.stop();
+			cout<<endl<<endl<<"1 VIDEO LOOP TIME: "<<one_video_loop_timer.time()<<endl<<endl;
 			return 0;
 		    }
 		
