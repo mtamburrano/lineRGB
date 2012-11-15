@@ -360,12 +360,12 @@ struct CV_EXPORTS Match
   {
   }
   
-  Match(int x, int y, float similarity, float similarity_rgb, const std::string& class_id, int template_id, short scartato)
-    : x(x), y(y), similarity(similarity), similarity_rgb(similarity_rgb), class_id(class_id), template_id(template_id), scartato(scartato)
+  Match(int x, int y, float sim_combined, float similarity, float similarity_rgb, const std::string& class_id, int template_id, short scartato)
+    : x(x), y(y), sim_combined(sim_combined), similarity(similarity), similarity_rgb(similarity_rgb), class_id(class_id), template_id(template_id), scartato(scartato)
   {
   }
 
-  /// Sort matches with high similarity to the front
+  /*/// Sort matches with high similarity to the front
   bool operator<(const Match& rhs) const
   {
     // Secondarily sort on template_id for the sake of duplicate removal
@@ -373,17 +373,40 @@ struct CV_EXPORTS Match
       return similarity > rhs.similarity;
     else
       return template_id < rhs.template_id;
+  }*/
+  
+  /// Sort matches with high similarity to the front
+  bool operator<(const Match& rhs) const
+  {
+    // Secondarily sort on template_id for the sake of duplicate removal
+    if (sim_combined != rhs.sim_combined)
+      return sim_combined > rhs.sim_combined;
+    else
+      return template_id < rhs.template_id;
   }
 
   bool operator==(const Match& rhs) const
   {
-    return x == rhs.x && y == rhs.y && similarity == rhs.similarity && class_id == rhs.class_id;
+    return x == rhs.x && y == rhs.y && sim_combined == rhs.sim_combined && similarity_rgb == rhs.similarity_rgb && similarity == rhs.similarity && class_id == rhs.class_id;
   }
+  
+  /*bool sort0(const Match& m1, const Match& m2) const
+  {
+      float sim1 = (m1.similarity + m1.similarity_rgb)/2
+      float sim2 = (m2.similarity + m2.similarity_rgb)/2
+      
+      if(sim1 != sim2)
+        return sim1 > sim2;
+      else
+        return m1.template_id < m2.template_id;
+  }*/
+  
 
   int x;
   int y;
   float similarity;
   float similarity_rgb;
+  float sim_combined;
   std::string class_id;
   int template_id;
   short scartato;

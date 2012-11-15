@@ -78,7 +78,7 @@ static int scoreUsed = 0;
 
 static int signFeat = 30;
 
-static int numPipelines = 4;
+static int numPipelines = 8;
 
 #define WHITE false
 #define BLACK true
@@ -3646,9 +3646,7 @@ void Detector::match(const std::vector<Mat>& sources, float threshold, std::vect
     }
   }
 
-  // Sort matches by similarity, and prune any duplicates introduced by pyramid refinement
-  for(int nm = 0; nm<numPipelines; nm++)
-    std::sort(matches[nm].begin(), matches[nm].end());
+  
   
   //if(DEBUGGING) std::cout<<"matches size: "<<matches.size()<<std::endl;
   QuantizedPyramid * tmpQp = quantizers[0];
@@ -3662,9 +3660,13 @@ void Detector::match(const std::vector<Mat>& sources, float threshold, std::vect
   
   
   
+    
   //waitKey();
+  // Sort matches by similarity, and prune any duplicates introduced by pyramid refinement
   for(int nm = 0; nm<numPipelines; nm++)
   {
+      std::sort(matches[nm].begin(), matches[nm].end());
+      
       std::vector<Match>::iterator new_end = std::unique(matches[nm].begin(), matches[nm].end());
       matches[nm].erase(new_end, matches[nm].end());
   }
@@ -3739,9 +3741,9 @@ for(int nm = 0; nm<numPipelines; nm++)
 	    if(diffFeatures > 0)
 		impact = diffFeatures/thresh_allow;
 	    
-	    if(DEBUGGING) std::cout<<" similarity prima: = "<<matches[nm][scar].similarity<<std::endl;
-	    float similarityAdjusted = matches[nm][scar].similarity - (float)impact;
-	    if(DEBUGGING) std::cout<<" similarity dopo: = "<<similarityAdjusted<<std::endl;
+	    if(DEBUGGING) std::cout<<" similarity combined prima: = "<<matches[nm][scar].sim_combined<<std::endl;
+	    float similarityAdjusted = matches[nm][scar].sim_combined - (float)impact;
+	    if(DEBUGGING) std::cout<<" similarity combined dopo: = "<<similarityAdjusted<<std::endl;
 	    if(DEBUGGING) std::cout<<" IMPACT = "<<impact<<std::endl;
 	    if(similarityAdjusted<threshold)
 	    {
@@ -3776,6 +3778,14 @@ struct MatchPredicateRGB
 {
   MatchPredicateRGB(float threshold) : threshold(threshold) {}
   bool operator() (const Match& m) { return m.similarity_rgb < threshold; }
+  float threshold;
+};
+
+// Used to filter out weak combined score matches 
+struct MatchPredicateCombined
+{
+  MatchPredicateCombined(float threshold) : threshold(threshold) {}
+  bool operator() (const Match& m) { return m.sim_combined < threshold; }
   float threshold;
 };
 
@@ -3854,8 +3864,8 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
 	//if(DEBUGGING) std::cout<<"raw_threshold: "<<raw_threshold<<std::endl;
 
 	//*DEBUG*//
-	if(total_similarity.rows != total_similarity_rgb.rows || total_similarity.cols != total_similarity_rgb.cols)
-		if(DEBUGGING) std::cout<<"ATTENZIONE LE MATRICI SIMILARITY NON SONO UGUALI"<<std::endl;
+	if(DEBUGGING && (total_similarity.rows != total_similarity_rgb.rows || total_similarity.cols != total_similarity_rgb.cols))
+		std::cout<<"ATTENZIONE LE MATRICI SIMILARITY NON SONO UGUALI"<<std::endl;
 
     //if(DEBUGGING) std::cout<<std::endl<<"template_id: "<<template_id<<"matrice: "<<total_similarity<<std::endl<<std::endl;
 
@@ -3897,7 +3907,7 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
 		score_rgb = (raw_score_rgb * 100.f) / (4 * (num_features+num_features_signature)) + 0.5f;
           }
 	  //if(DEBUGGING) std::cout<<"score temporaneo: "<<score<<"score rgb temporaneo: "<<score_rgb<<std::endl;
-          candidates.push_back(Match(x, y, score, score_rgb, class_id, static_cast<int>(template_id), 0));
+          candidates.push_back(Match(x, y, 0, score, score_rgb, class_id, static_cast<int>(template_id), 0));
         }
       }
     }
@@ -3981,6 +3991,7 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
 	    // Find best local adjustment
 	    int best_score = 0;
 	    int best_score_rgb = 0;
+	    int best_score_combined = 0;
 	    int best_r = -1, best_c = -1;
 	    for (int r = 0; r < total_similarity.rows; ++r)
 	    {
@@ -4015,66 +4026,48 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
 		}
 		
 		
-		if(nm == 0)
+		int score_combined;
+		switch(nm)
 		{
-		    int score_combined = (score + score_rgb)/2;
-		    
-		    if (score_combined > best_score)
-		    {
-			//if((score_rgb >= threshold && score >= threshold -5) || (score >= threshold && score_rgb >= threshold -5))
-			//{
-			    best_score = score;
-			    best_score_rgb = score_rgb;
-			    best_r = r;
-			    best_c = c;
-			//}
-		    }
+		    case 0:
+			score_combined = (score + score_rgb)/2;
+			break;
+		    case 1:
+			score_combined = ((score/100) * 30) + ((score_rgb/100)*70);
+			break;
+		    case 2:
+			score_combined = ((score/100) * 70) + ((score_rgb/100)*30);
+			break;
+		    case 3:
+			score_combined = ((score/100) * 20) + ((score_rgb/100)*80);
+			break;
+		    case 4:
+			score_combined = (score + score_rgb)/2;
+			break;
+		    case 5:
+			score_combined = ((score/100) * 30) + ((score_rgb/100)*70);
+			break;
+		    case 6:
+			score_combined = ((score/100) * 70) + ((score_rgb/100)*30);
+			break;
+		    case 7:
+			score_combined = ((score/100) * 20) + ((score_rgb/100)*80);
+			break;
+		    default:
+			cout<<"errore: "<<nm<<endl;
+			CV_Assert(false);
+			
 		}
-		else if(nm == 1)
+   
+		if (score_combined > best_score_combined)
 		{
-		    int score_combined =0;
-		    
-		    if (score_combined > best_score)
-		    {
-			//if((score_rgb >= threshold && score >= threshold -5) || (score >= threshold && score_rgb >= threshold -5))
-			//{
-			    best_score = score;
-			    best_score_rgb = score_rgb;
-			    best_r = r;
-			    best_c = c;
-			//}
-		    }
+		    best_score_combined = score_combined;
+		    best_score = score;
+		    best_score_rgb = score_rgb;
+		    best_r = r;
+		    best_c = c;
 		}
-		else if(nm == 2)
-		{
-		    int score_combined = (score + score_rgb)/2;
-		    
-		    if (score_combined > best_score)
-		    {
-			//if((score_rgb >= threshold && score >= threshold -5) || (score >= threshold && score_rgb >= threshold -5))
-			//{
-			    best_score = score;
-			    best_score_rgb = score_rgb;
-			    best_r = r;
-			    best_c = c;
-			//}
-		    }
-		}
-		else if(nm == 3)
-		{
-		    int score_combined = (score + score_rgb)/2;
-		    
-		    if (score_combined > best_score)
-		    {
-			//if((score_rgb >= threshold && score >= threshold -5) || (score >= threshold && score_rgb >= threshold -5))
-			//{
-			    best_score = score;
-			    best_score_rgb = score_rgb;
-			    best_r = r;
-			    best_c = c;
-			//}
-		    }
-		}
+		
 		
 		
 	      }
@@ -4086,55 +4079,78 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
 	    match.similarity = best_score;
 	    //match.similarity_rgb = (best_score_rgb * 100.f) / (16 * num_features);
 	    match.similarity_rgb = best_score_rgb;
+	    match.sim_combined = best_score_combined;
 	  }
 
 	    
     //if(DEBUGGING) std::cout<<"dimensione candidates PRIMA IL REFINEMENT: "<<candidates.size()<<std::endl;
 	  // Filter out any matches that drop below the similarity threshold
-	  if(nm == 0)
-	  {
-	      std::vector<Match>::iterator new_end = std::remove_if(actualCandidates.begin(), actualCandidates.end(),
+	    std::vector<Match>::iterator new_end;
+	    std::vector<Match>::iterator new_end_rgb;
+	    switch(nm)
+	    {
+		case 0:
+		    new_end = std::remove_if(actualCandidates.begin(), actualCandidates.end(),
+								    MatchPredicateCombined(threshold));
+		    actualCandidates.erase(new_end, actualCandidates.end());
+		    break;
+		case 1:
+		    new_end = std::remove_if(actualCandidates.begin(), actualCandidates.end(),
+								    MatchPredicateCombined(threshold));
+		    actualCandidates.erase(new_end, actualCandidates.end());
+		    break;
+		case 2:
+		    new_end = std::remove_if(actualCandidates.begin(), actualCandidates.end(),
+								    MatchPredicateCombined(threshold));
+		    actualCandidates.erase(new_end, actualCandidates.end());
+		    break;
+		case 3:
+		    new_end = std::remove_if(actualCandidates.begin(), actualCandidates.end(),
+								    MatchPredicateCombined(threshold));
+		    actualCandidates.erase(new_end, actualCandidates.end());
+		    break;
+		case 4:		    
+		    new_end = std::remove_if(actualCandidates.begin(), actualCandidates.end(),
 								    MatchPredicate(threshold));
-	    
-	      actualCandidates.erase(new_end, actualCandidates.end());
-
-	      std::vector<Match>::iterator new_end_rgb = std::remove_if(actualCandidates.begin(), actualCandidates.end(),
+		    actualCandidates.erase(new_end, actualCandidates.end());
+		    
+		    new_end_rgb = std::remove_if(actualCandidates.begin(), actualCandidates.end(),
 								    MatchPredicateRGB(threshold));
-	      actualCandidates.erase(new_end_rgb, actualCandidates.end());
-	  }
-	  else if(nm == 1)
-	  {
-	      std::vector<Match>::iterator new_end = std::remove_if(actualCandidates.begin(), actualCandidates.end(),
+		    actualCandidates.erase(new_end_rgb, actualCandidates.end());
+		    break;
+		case 5:
+		    new_end = std::remove_if(actualCandidates.begin(), actualCandidates.end(),
 								    MatchPredicate(threshold));
-	    
-	      actualCandidates.erase(new_end, actualCandidates.end());
-
-	      std::vector<Match>::iterator new_end_rgb = std::remove_if(actualCandidates.begin(), actualCandidates.end(),
+		    actualCandidates.erase(new_end, actualCandidates.end());
+		    
+		    new_end_rgb = std::remove_if(actualCandidates.begin(), actualCandidates.end(),
 								    MatchPredicateRGB(threshold));
-	      actualCandidates.erase(new_end_rgb, actualCandidates.end());
-	  }
-	  else if(nm == 2)
-	  {
-	      std::vector<Match>::iterator new_end = std::remove_if(actualCandidates.begin(), actualCandidates.end(),
+		    actualCandidates.erase(new_end_rgb, actualCandidates.end());
+		    break;
+		case 6:
+		    new_end = std::remove_if(actualCandidates.begin(), actualCandidates.end(),
 								    MatchPredicate(threshold));
-	    
-	      actualCandidates.erase(new_end, actualCandidates.end());
-
-	      std::vector<Match>::iterator new_end_rgb = std::remove_if(actualCandidates.begin(), actualCandidates.end(),
+		    actualCandidates.erase(new_end, actualCandidates.end());
+		    
+		    new_end_rgb = std::remove_if(actualCandidates.begin(), actualCandidates.end(),
 								    MatchPredicateRGB(threshold));
-	      actualCandidates.erase(new_end_rgb, actualCandidates.end());
-	  }
-	  else if(nm == 3)
-	  {
-	      std::vector<Match>::iterator new_end = std::remove_if(actualCandidates.begin(), actualCandidates.end(),
+		    actualCandidates.erase(new_end_rgb, actualCandidates.end());
+		    break;
+		case 7:
+		    new_end = std::remove_if(actualCandidates.begin(), actualCandidates.end(),
 								    MatchPredicate(threshold));
-	    
-	      actualCandidates.erase(new_end, actualCandidates.end());
-
-	      std::vector<Match>::iterator new_end_rgb = std::remove_if(actualCandidates.begin(), actualCandidates.end(),
+		    actualCandidates.erase(new_end, actualCandidates.end());
+		    
+		    new_end_rgb = std::remove_if(actualCandidates.begin(), actualCandidates.end(),
 								    MatchPredicateRGB(threshold));
-	      actualCandidates.erase(new_end_rgb, actualCandidates.end());
-	  }
+		    actualCandidates.erase(new_end_rgb, actualCandidates.end());
+		    break;
+		default:
+			cout<<"errore: "<<nm<<endl;
+			CV_Assert(false);
+		
+	    }
+	  
       }
       
 

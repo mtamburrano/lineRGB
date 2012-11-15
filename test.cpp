@@ -822,7 +822,7 @@ string getDepthFromMask(string mask)
     return depth;
 }
 
-void deleteResults(vector<int> v_threshold_rgb,vector<bool> v_use63, vector<int> v_featuresUsed, vector<int> v_signFeat, vector<string> nomiVideo, vector<pair<string,string> > all_categories)
+void deleteResults(int nPipe, vector<int> v_threshold_rgb,vector<bool> v_use63, vector<int> v_featuresUsed, vector<int> v_signFeat, vector<string> nomiVideo, vector<pair<string,string> > all_categories)
 {
     bool actual_use63;
     int actual_featuresUsed;
@@ -865,10 +865,14 @@ void deleteResults(vector<int> v_threshold_rgb,vector<bool> v_use63, vector<int>
         {
             string nomeVideo;
             nomeVideo = nomiVideo.at(test10);
-        
-            string pathRes = "./results/" + nomeVideo + "/" + class_id + "/" + string_use63 + "_" + string_featuresUsed + "_" + string_signFeat + "_" + string_threshold + ".yml";
-            if(fileExists(pathRes.c_str()))
-                remove(pathRes.c_str());
+            for(int nm = 0; nm<nPipe; nm++)
+            {
+                string pipeline = "pipeline_" + intToString(nm);
+                
+                string pathRes = "./results/" + pipeline + "/" + nomeVideo + "/" + class_id + "/" + string_use63 + "_" + string_featuresUsed + "_" + string_signFeat + "_" + string_threshold + ".yml";
+                if(fileExists(pathRes.c_str()))
+                    remove(pathRes.c_str());
+            }
         }
     }
     }  
@@ -896,8 +900,10 @@ void swapBest(pair<string, string> video_plus_category, map<pair<string, string>
     map_falsePosNeg[video_plus_category] = actual_fpfn; 
 }
 
-void analyzeResults_category_video(vector<string>& nomiVideo, vector<int> v_threshold_rgb, vector<bool> v_use63, vector<int> v_featuresUsed, vector<int> v_signFeat, vector<pair<string,string> > all_categories)
+void analyzeResults_category_video(int nPipe, vector<string>& nomiVideo, vector<int> v_threshold_rgb, vector<bool> v_use63, vector<int> v_featuresUsed, vector<int> v_signFeat, vector<pair<string,string> > all_categories)
 {
+    string pipeline = "pipeline_" + intToString(nPipe);
+    
     //pair< mappa<pair<video, categoria>, valore_parametro>  , primoSecondoOTerzomigliore>
     map<pair<string, string>, bool> fp_best_map_use63;
     map<pair<string, string>, int> fp_best_map_featuresUsed;
@@ -1069,7 +1075,9 @@ void analyzeResults_category_video(vector<string>& nomiVideo, vector<int> v_thre
             string nomeVideo;
             nomeVideo = nomiVideo.at(test10);
         
-            string pathRes = "./results/" + nomeVideo + "/" + class_id + "/" + string_use63 + "_" + string_featuresUsed + "_" + string_signFeat + "_" + string_threshold + ".yml";
+            
+            
+            string pathRes = "./results/" + pipeline + "/" + nomeVideo + "/" + class_id + "/" + string_use63 + "_" + string_featuresUsed + "_" + string_signFeat + "_" + string_threshold + ".yml";
             if(fileExists(pathRes.c_str()))
             {
                 cv::FileStorage fs(pathRes, cv::FileStorage::READ);
@@ -1368,7 +1376,7 @@ void analyzeResults_category_video(vector<string>& nomiVideo, vector<int> v_thre
         string nomeVideo = actual_pair.first;
         string class_id = actual_pair.second;
         
-        string dirVideoCat = "./results/" + nomeVideo + "/" + class_id + "/" + "BEST_RESULTS.yml";
+        string dirVideoCat = "./results/" + pipeline + "/" + nomeVideo + "/" + class_id + "/" + "BEST_RESULTS.yml";
         
         cv::FileStorage fs_best(dirVideoCat, cv::FileStorage::WRITE);
         fs_best << "BEST FALSE POSITIVES" << "[";
@@ -1539,8 +1547,10 @@ void analyzeResults_category_video(vector<string>& nomiVideo, vector<int> v_thre
     
 }
 
-void analyzeResults_video(vector<string>& nomiVideo, vector<int> v_threshold_rgb, vector<bool> v_use63, vector<int> v_featuresUsed, vector<int> v_signFeat, vector<pair<string,string> > all_categories)
+void analyzeResults_video(int nPipe, vector<string>& nomiVideo, vector<int> v_threshold_rgb, vector<bool> v_use63, vector<int> v_featuresUsed, vector<int> v_signFeat, vector<pair<string,string> > all_categories)
 {
+    string pipeline = "pipeline_" + intToString(nPipe);
+    
     //< mappa<pair<video, parametriUsati>, valore_parametro>
     map<pair<string, string>, int> map_expectedPositive;
     map<pair<string, string>, int> map_falsePositive;
@@ -1591,7 +1601,7 @@ void analyzeResults_video(vector<string>& nomiVideo, vector<int> v_threshold_rgb
             string nomeVideo;
             nomeVideo = nomiVideo.at(test10);
         
-            string pathRes = "./results/" + nomeVideo + "/" + class_id + "/" + string_use63 + "_" + string_featuresUsed + "_" + string_signFeat + "_" + string_threshold + ".yml";
+            string pathRes = "./results/" + pipeline + "/" + nomeVideo + "/" + class_id + "/" + string_use63 + "_" + string_featuresUsed + "_" + string_signFeat + "_" + string_threshold + ".yml";
             if(fileExists(pathRes.c_str()))
             {
                 cv::FileStorage fs(pathRes, cv::FileStorage::READ);
@@ -1814,7 +1824,7 @@ void analyzeResults_video(vector<string>& nomiVideo, vector<int> v_threshold_rgb
         }
         cout<<endl;*/
             
-        string dirVideo = "./results/" + nomeVideo + "/" + "BEST_RESULTS.yml";
+        string dirVideo = "./results/" + pipeline + "/" + nomeVideo + "/" + "BEST_RESULTS.yml";
         
         cv::FileStorage fs_best(dirVideo, cv::FileStorage::WRITE);
         fs_best << "BEST FALSE POSITIVES" << "[";
@@ -1922,8 +1932,10 @@ void analyzeResults_video(vector<string>& nomiVideo, vector<int> v_threshold_rgb
     
 }
 
-void analyzeResults_global(vector<string>& nomiVideo, vector<int> v_threshold_rgb, vector<bool> v_use63, vector<int> v_featuresUsed, vector<int> v_signFeat, vector<pair<string,string> > all_categories)
+void analyzeResults_global(int nPipe, vector<string>& nomiVideo, vector<int> v_threshold_rgb, vector<bool> v_use63, vector<int> v_featuresUsed, vector<int> v_signFeat, vector<pair<string,string> > all_categories)
 {
+    string pipeline = "pipeline_" + intToString(nPipe);
+    
     //< mappa<parametriUsati, valore_parametro>
     map<string, int> map_expectedPositive;
     map<string, int> map_falsePositive;
@@ -1974,7 +1986,7 @@ void analyzeResults_global(vector<string>& nomiVideo, vector<int> v_threshold_rg
             string nomeVideo;
             nomeVideo = nomiVideo.at(test10);
         
-            string pathRes = "./results/" + nomeVideo + "/" + class_id + "/" + string_use63 + "_" + string_featuresUsed + "_" + string_signFeat + "_" + string_threshold + ".yml";
+            string pathRes = "./results/" + pipeline + "/" + nomeVideo + "/" + class_id + "/" + string_use63 + "_" + string_featuresUsed + "_" + string_signFeat + "_" + string_threshold + ".yml";
             if(fileExists(pathRes.c_str()))
             {
                 cv::FileStorage fs(pathRes, cv::FileStorage::READ);
@@ -2171,7 +2183,7 @@ void analyzeResults_global(vector<string>& nomiVideo, vector<int> v_threshold_rg
     }
     
         
-    string dirVideo = "./results/BEST_RESULTS.yml";
+    string dirVideo = "./results/" + pipeline + "/BEST_RESULTS.yml";
     
     cv::FileStorage fs_best(dirVideo, cv::FileStorage::WRITE);
     fs_best << "BEST FALSE POSITIVES" << "[";
@@ -2270,109 +2282,114 @@ void analyzeResults_global(vector<string>& nomiVideo, vector<int> v_threshold_rg
     
 }
 
- void pulisci_risultati(bool& actual_use63, int& actual_featuresUsed, int& actual_signFeat, bool& actual_punteggio16, bool& actual_featuresSignatureCandidates, bool& actual_grayEnabled, bool& actual_signatureEnabled, int& actual_threshold_rgb, int& actual_matching_threshold, string class_id, string nomeVideo)
+ void pulisci_risultati(int nPipe, bool& actual_use63, int& actual_featuresUsed, int& actual_signFeat, bool& actual_punteggio16, bool& actual_featuresSignatureCandidates, bool& actual_grayEnabled, bool& actual_signatureEnabled, int& actual_threshold_rgb, int& actual_matching_threshold, string class_id, string nomeVideo)
  {
-    string string_use63 = "use63-" + boolToString(actual_use63);
-    string string_threshold = "thresholdRGB-" + intToString(actual_threshold_rgb);
-    string string_featuresUsed = "featuresUsed-" + intToString(actual_featuresUsed);
-    string string_signFeat = "signFeat-" + intToString(actual_signFeat);
-
-    string pathRes = "./results/" + nomeVideo + "/" + class_id + "/" + string_use63 + "_" + string_featuresUsed + "_" + string_signFeat + "_" + string_threshold + ".yml";
-    if(fileExists(pathRes.c_str()))
+    for(int nm = 0; nm < nPipe; nm++)
     {
-        cv::FileStorage fs(pathRes, cv::FileStorage::READ);
+        string string_use63 = "use63-" + boolToString(actual_use63);
+        string string_threshold = "thresholdRGB-" + intToString(actual_threshold_rgb);
+        string string_featuresUsed = "featuresUsed-" + intToString(actual_featuresUsed);
+        string string_signFeat = "signFeat-" + intToString(actual_signFeat);
+
+        string pipeline = "pipeline_" + intToString(nm);
+        string pathRes = "./results/" + pipeline + "/" + nomeVideo + "/" + class_id + "/" + string_use63 + "_" + string_featuresUsed + "_" + string_signFeat + "_" + string_threshold + ".yml";
+        if(fileExists(pathRes.c_str()))
+        {
+            cv::FileStorage fs(pathRes, cv::FileStorage::READ);
+                
+            vector<bool> vr_punteggio16;
+            vector<bool> vr_featuresSignatureCandidates;
+            vector<bool> vr_signatureEnabled;
+            vector<bool> vr_grayEnabled;
+            vector<int> vr_matching_threshold;
+            vector<int> vr_exp_positives;
+            vector<int> vr_nFalsePositives;
+            vector<int> vr_nFalseNegatives;
             
-        vector<bool> vr_punteggio16;
-        vector<bool> vr_featuresSignatureCandidates;
-        vector<bool> vr_signatureEnabled;
-        vector<bool> vr_grayEnabled;
-        vector<int> vr_matching_threshold;
-        vector<int> vr_exp_positives;
-        vector<int> vr_nFalsePositives;
-        vector<int> vr_nFalseNegatives;
-        
-        vector<bool> vr_punteggio16_clean;
-        vector<bool> vr_featuresSignatureCandidates_clean;
-        vector<bool> vr_signatureEnabled_clean;
-        vector<bool> vr_grayEnabled_clean;
-        vector<int> vr_matching_threshold_clean;
-        vector<int> vr_exp_positives_clean;
-        vector<int> vr_nFalsePositives_clean;
-        vector<int> vr_nFalseNegatives_clean;
-        cout<<pathRes<<endl;
-        cv::FileNode fn = fs["tests"];
-        for (cv::FileNodeIterator i = fn.begin(); i != fn.end(); ++i)
-        {
-            vr_punteggio16.push_back(((int)(*i)["punteggio16"]));
-            vr_featuresSignatureCandidates.push_back(((int)(*i)["featuresSignCand"]));
-            vr_signatureEnabled.push_back(((int)(*i)["signatureEnabled"]));
-            vr_grayEnabled.push_back(((int)(*i)["grayEnabled"]));
-            vr_matching_threshold.push_back((*i)["matching"]);
-            vr_exp_positives.push_back((*i)["Expected positives"]);
-            vr_nFalsePositives.push_back((*i)["False Positives"]);
-            vr_nFalseNegatives.push_back((*i)["False Negatives"]);
-        }
-        fs.release();
-        
-        
-        
-        for(int in = 0; in <vr_punteggio16.size(); in++)
-        {
-            bool isAlreadyInside = false;
-            //controllo se il result con questi parametri non è già presente
-            for(int in2 = in+1; in2 <vr_punteggio16.size(); in2++)
+            vector<bool> vr_punteggio16_clean;
+            vector<bool> vr_featuresSignatureCandidates_clean;
+            vector<bool> vr_signatureEnabled_clean;
+            vector<bool> vr_grayEnabled_clean;
+            vector<int> vr_matching_threshold_clean;
+            vector<int> vr_exp_positives_clean;
+            vector<int> vr_nFalsePositives_clean;
+            vector<int> vr_nFalseNegatives_clean;
+            cout<<pathRes<<endl;
+            cv::FileNode fn = fs["tests"];
+            for (cv::FileNodeIterator i = fn.begin(); i != fn.end(); ++i)
             {
-                if(vr_punteggio16.at(in) == vr_punteggio16.at(in2) &&
-                    vr_featuresSignatureCandidates.at(in) == vr_featuresSignatureCandidates.at(in2) &&
-                    vr_signatureEnabled.at(in) == vr_signatureEnabled.at(in2) &&
-                    vr_grayEnabled.at(in) == vr_grayEnabled.at(in2) &&
-                    vr_matching_threshold.at(in) == vr_matching_threshold.at(in2))
+                vr_punteggio16.push_back(((int)(*i)["punteggio16"]));
+                vr_featuresSignatureCandidates.push_back(((int)(*i)["featuresSignCand"]));
+                vr_signatureEnabled.push_back(((int)(*i)["signatureEnabled"]));
+                vr_grayEnabled.push_back(((int)(*i)["grayEnabled"]));
+                vr_matching_threshold.push_back((*i)["matching"]);
+                vr_exp_positives.push_back((*i)["Expected positives"]);
+                vr_nFalsePositives.push_back((*i)["False Positives"]);
+                vr_nFalseNegatives.push_back((*i)["False Negatives"]);
+            }
+            fs.release();
+            
+            
+            
+            for(int in = 0; in <vr_punteggio16.size(); in++)
+            {
+                bool isAlreadyInside = false;
+                //controllo se il result con questi parametri non è già presente
+                for(int in2 = in+1; in2 <vr_punteggio16.size(); in2++)
                 {
-                    isAlreadyInside = true;
+                    if(vr_punteggio16.at(in) == vr_punteggio16.at(in2) &&
+                        vr_featuresSignatureCandidates.at(in) == vr_featuresSignatureCandidates.at(in2) &&
+                        vr_signatureEnabled.at(in) == vr_signatureEnabled.at(in2) &&
+                        vr_grayEnabled.at(in) == vr_grayEnabled.at(in2) &&
+                        vr_matching_threshold.at(in) == vr_matching_threshold.at(in2))
+                    {
+                        isAlreadyInside = true;
+                    }
                 }
+                
+                if(isAlreadyInside == false)
+                {
+                    vr_punteggio16_clean.push_back(vr_punteggio16.at(in));
+                    vr_featuresSignatureCandidates_clean.push_back(vr_featuresSignatureCandidates.at(in));
+                    vr_signatureEnabled_clean.push_back(vr_signatureEnabled.at(in));
+                    vr_grayEnabled_clean.push_back(vr_grayEnabled.at(in));
+                    vr_matching_threshold_clean.push_back(vr_matching_threshold.at(in));
+                    vr_exp_positives_clean.push_back(vr_exp_positives.at(in));
+                    vr_nFalsePositives_clean.push_back(vr_nFalsePositives.at(in));
+                    vr_nFalseNegatives_clean.push_back(vr_nFalseNegatives.at(in));
+                }
+                
             }
             
-            if(isAlreadyInside == false)
+            cv::FileStorage fs_new(pathRes, cv::FileStorage::WRITE);
+            fs_new << "tests" << "[";
+            for(int res = 0; res<vr_punteggio16_clean.size(); res++)
             {
-                vr_punteggio16_clean.push_back(vr_punteggio16.at(in));
-                vr_featuresSignatureCandidates_clean.push_back(vr_featuresSignatureCandidates.at(in));
-                vr_signatureEnabled_clean.push_back(vr_signatureEnabled.at(in));
-                vr_grayEnabled_clean.push_back(vr_grayEnabled.at(in));
-                vr_matching_threshold_clean.push_back(vr_matching_threshold.at(in));
-                vr_exp_positives_clean.push_back(vr_exp_positives.at(in));
-                vr_nFalsePositives_clean.push_back(vr_nFalsePositives.at(in));
-                vr_nFalseNegatives_clean.push_back(vr_nFalseNegatives.at(in));
+            
+            
+                fs_new << "{";
+                
+                fs_new << "Test" << res;
+                fs_new << "signatureEnabled" << vr_signatureEnabled_clean.at(res);
+                fs_new << "grayEnabled" << vr_grayEnabled_clean.at(res);
+                fs_new << "featuresSignCand" << vr_featuresSignatureCandidates_clean.at(res);
+                fs_new << "matching"  << vr_matching_threshold_clean.at(res);
+                fs_new << "punteggio16"  << vr_punteggio16_clean.at(res);
+                fs_new << "results" << "-----";
+                fs_new <<"Expected positives"<<vr_exp_positives_clean.at(res);
+                fs_new <<"False Positives"<<vr_nFalsePositives_clean.at(res);
+                fs_new <<"False Negatives"<<vr_nFalseNegatives_clean.at(res);
+                
+                fs_new << "}"; // current result
+            
+            
             }
-            
-        }
-        
-        cv::FileStorage fs_new(pathRes, cv::FileStorage::WRITE);
-        fs_new << "tests" << "[";
-        for(int res = 0; res<vr_punteggio16_clean.size(); res++)
-        {
-        
-        
-            fs_new << "{";
-            
-            fs_new << "Test" << res;
-            fs_new << "signatureEnabled" << vr_signatureEnabled_clean.at(res);
-            fs_new << "grayEnabled" << vr_grayEnabled_clean.at(res);
-            fs_new << "featuresSignCand" << vr_featuresSignatureCandidates_clean.at(res);
-            fs_new << "matching"  << vr_matching_threshold_clean.at(res);
-            fs_new << "punteggio16"  << vr_punteggio16_clean.at(res);
-            fs_new << "results" << "-----";
-            fs_new <<"Expected positives"<<vr_exp_positives_clean.at(res);
-            fs_new <<"False Positives"<<vr_nFalsePositives_clean.at(res);
-            fs_new <<"False Negatives"<<vr_nFalseNegatives_clean.at(res);
-            
-            fs_new << "}"; // current result
-        
+            fs_new << "]"; // tests
+            fs_new.release();
         
         }
-        fs_new << "]"; // tests
-        fs_new.release();
-    
     }
+    
     
      
  }
@@ -2501,3 +2518,134 @@ void saveResults(bool& actual_use63, int& actual_featuresUsed, int& actual_signF
 
 
 
+bool contains(vector<int> vc, int n)
+{
+    for(int i = 0; i<vc.size(); i++)
+        if(vc[i] == n)
+            return true;
+    
+    return false;
+}
+
+void analyzeResults_pipelines(int nPipe)
+{
+    int maxInt = std::numeric_limits<int>::max(); 
+    int best_fp[nPipe];
+    int best_fn[nPipe];
+    int best_fpfn[nPipe];
+    for(int nm = 0; nm<nPipe; nm++)
+    {
+        string pipeline = "pipeline_" + intToString(nm);
+        string pathRes = "./results/" + pipeline + "/BEST_RESULTS.yml";
+        if(fileExists(pathRes.c_str()))
+        {
+            cv::FileStorage fs(pathRes, cv::FileStorage::READ);
+            
+            cv::FileNode fn = fs["BEST FALSE POSITIVES"];
+            cv::FileNodeIterator i = fn.begin();
+            if(((int)(*i)["position"]) == 1)
+                best_fp[nm] = (int)(*i)["False Positives"];
+            
+            fn = fs["BEST FALSE NEGATIVES"];
+            i = fn.begin();
+            if(((int)(*i)["position"]) == 1)
+                best_fn[nm] = (int)(*i)["False Negatives"];
+            
+            fn = fs["BEST FALSE SUM"];
+            i = fn.begin();
+            if(((int)(*i)["position"]) == 1)
+                best_fpfn[nm] = (int)(*i)["FN_plus_FP"];
+            
+            fs.release();
+        }
+        
+            else
+                cout<<"Pipeline does not exist"<<endl;
+    }
+    
+    vector<int> bestIndexFP;
+    vector<int> bestIndexFN;
+    vector<int> bestIndexFPFN;
+    for(int i = 0; i<nPipe; i++)
+    {
+        int tmpBestFP = maxInt;
+        int tmpBestFN = maxInt;
+        int tmpBestFPFN = maxInt;
+        
+        int nextFP;
+        int nextFN;
+        int nextFPFN;
+        for(int j = 0; j<nPipe; j++)
+        {
+            if(best_fp[j] < tmpBestFP && contains(bestIndexFP, j) == false)
+            {
+                tmpBestFP = best_fp[j];
+                nextFP = j;
+            }
+            if(best_fn[j] < tmpBestFN && contains(bestIndexFN, j) == false)
+            {
+                tmpBestFN = best_fn[j];
+                nextFN = j;
+            }
+            if(best_fpfn[j] < tmpBestFPFN && contains(bestIndexFPFN, j) == false)
+            {
+                tmpBestFPFN = best_fpfn[j];
+                nextFPFN = j;
+            }
+        }
+        
+        bestIndexFP.push_back(nextFP);
+        bestIndexFN.push_back(nextFN);
+        bestIndexFPFN.push_back(nextFPFN);
+        
+    }
+    
+    
+    string dirMain = "./results/BEST_PIPELINES.yml";
+    
+    cv::FileStorage fs_best(dirMain, cv::FileStorage::WRITE);
+    fs_best << "BEST FALSE POSITIVES" << "[";
+    int position = 1;
+    for(int nm = 0; nm<nPipe; nm++)
+    {
+        fs_best << "{";
+            fs_best << "position" << position;
+            fs_best << "PIPELINE" << bestIndexFP[nm];
+            fs_best <<"False Positives"<<best_fp[bestIndexFP[nm]];
+        fs_best << "}";
+        position++;
+    }
+    fs_best << "]";
+    
+    fs_best << "BEST FALSE NEGATIVES" << "[";
+        position = 1;
+        for(int nm = 0; nm<nPipe; nm++)
+        {
+            fs_best << "{";
+                fs_best << "position" << position;
+                fs_best << "PIPELINE" << bestIndexFN[nm];
+                fs_best <<"False Negatives"<<best_fn[bestIndexFN[nm]];
+            fs_best << "}";
+            position++;
+        }
+    fs_best << "]";
+    fs_best << "BEST FALSE SUM" << "[";
+        position = 1;
+        for(int nm = 0; nm<nPipe; nm++)
+        {
+            fs_best << "{";
+                fs_best << "position" << position;
+                fs_best << "PIPELINE" << bestIndexFPFN[nm];
+                fs_best <<"FN_plus_FP"<<best_fpfn[bestIndexFPFN[nm]];
+            fs_best << "}";
+            position++;
+        }
+    fs_best << "]";
+    
+    fs_best.release();
+        
+    
+    
+    
+    
+}

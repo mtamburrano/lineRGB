@@ -11,8 +11,9 @@ using namespace cv;
 
 static bool DEBUGGING = false;
 static bool TESTING = true;
-static int numPipelines = 4;
+static int numPipelines = 8;
 static int curMatch = 0;
+static bool checkMinMaxBB = false;
 
 // Adapted from cv_timer in cv_utilities
 class Timer
@@ -55,6 +56,8 @@ void writeLinemod(const cv::Ptr<cv::my_linemod::Detector>& detector, const std::
 void drawResponse(const std::vector<cv::my_linemod::Template>& templates, 
                   int num_modalities, cv::Mat& dst, cv::Point offset, int T, short scartato, string class_id, VideoFrame vf);
 
+void checkAndWrite_bb_groundTruth(string class_id, Rect& bb, string immagineTemplate);
+
 Mat rotateImage(const Mat& source, double angle);
 
 
@@ -72,6 +75,7 @@ int main(int argc, char * argv[])
     bool analyze = false;
     bool puliscirisultati = false;
     bool converted = false;
+    bool analyzePipe = false;
     
     int num_modalities = 1;
     
@@ -129,6 +133,11 @@ int main(int argc, char * argv[])
        {   
           analyze = true;
           printf("ANALYZE RESULTS\n");
+       }
+       if (strcmp("-analyzePipe", argv[h]) == 0) 
+       {   
+          analyzePipe = true;
+          printf("ANALYZE PIPELINES\n");
        }
        if (strcmp("-pulisci", argv[h]) == 0) 
        {   
@@ -365,10 +374,23 @@ int main(int argc, char * argv[])
 				}
 				else
 				{
-				    cv::resize(singleSource, singleSourceDst, Size(), resizeFactor, resizeFactor);
-				    cv::resize(mask, maskDst, Size(), resizeFactor, resizeFactor);
+				    if(resizeFactor < 1.0)
+				    {
+					cv::resize(singleSource, singleSourceDst, Size(), resizeFactor, resizeFactor);//, CV_INTER_AREA);
+					cv::resize(mask, maskDst, Size(), resizeFactor, resizeFactor);//, CV_INTER_AREA);
+					
+					/*cout<<"iter: "<< iter<<" - resizeFactor: "<<resizeFactor<<endl;
+					imshow("original_"+intToString(iter), singleSource);
+					imshow("rimpicciolito_"+intToString(iter), singleSourceDst);*/
+					
+				    }
+				    else
+				    {
+					cv::resize(singleSource, singleSourceDst, Size(), resizeFactor, resizeFactor, CV_INTER_CUBIC);
+					cv::resize(mask, maskDst, Size(), resizeFactor, resizeFactor, CV_INTER_CUBIC);
+				    }
 				}
-				
+				if(DEBUGGING)imshow("color_scaled_"+intToString(iter), singleSourceDst);
 				for(int iterRot = 0; iterRot < 3; iterRot++)
 				{
 				    double rotationFactor = rotations[iterRot];
@@ -384,7 +406,7 @@ int main(int argc, char * argv[])
 					singleSourceFinal = rotateImage(singleSourceDst, rotationFactor);
 					maskFinal = rotateImage(maskDst, rotationFactor);
 				    }
-				    
+
 				    cv::Rect bb;
 				    std::vector<cv::Mat> sourcesTemplate;
 				    sourcesTemplate.push_back(singleSourceFinal);
@@ -395,15 +417,18 @@ int main(int argc, char * argv[])
 				    //memorizza scala nel class_id
 				    //int template_id = detector->addTemplate(sourcesTemplate, class_id + "_scale_" + intToString(iter), maskDst, &bb);
 				    int template_id = detector->addTemplate(sourcesTemplate, class_id, maskFinal, &bb);
-				    const std::vector<cv::my_linemod::Template>& templates = detector->getTemplates(class_id, template_id);
-				    if(DEBUGGING == true && iter== 4)
+				    
+				    if(checkMinMaxBB == true)
+					checkAndWrite_bb_groundTruth(class_id, bb, immagineTemplate);
+				    
+				    if(DEBUGGING == true && iterRot == 2)
 				    {
-					
+					const std::vector<cv::my_linemod::Template>& templates = detector->getTemplates(class_id, template_id);
 					for (int l = 0; l < (int)templates[0].features.size(); ++l)
 					{
 					  cv::Scalar colorT;
 					  cv::my_linemod::Feature f = templates[0].features[l];
-					  cv::Point pt(f.x + 228, f.y +246);
+					  cv::Point pt(f.x + bb.x, f.y +bb.y);
 					  switch(f.rgbLabel)
 					  {
 					  case 0: colorT = CV_RGB(255,0,0); break;
@@ -416,9 +441,10 @@ int main(int argc, char * argv[])
 					  case 7: colorT = CV_RGB(0,0,0); break;
 					  } 
 					 //if(f.onBorder == true)
+					    rectangle(singleSourceFinal, bb, CV_RGB(0,0,0), 2);
 					    cv::circle(singleSourceFinal, pt, 2, colorT);
 					}
-					if(DEBUGGING)imshow("color_featured"+intToString(iterRot), singleSourceFinal);
+					if(DEBUGGING)imshow("color_rotated_featured"+intToString(iterRot), singleSourceFinal);
 					
 					//imwrite("./provaTemplate_can_1.png", singleSourceDst);
 					waitKey(0);
@@ -483,14 +509,22 @@ int main(int argc, char * argv[])
 	//analyze funziona solo se testall è abilitato
 	if(analyze == true)
 	{
-	    analyzeResults_category_video(nomiVideo, v_threshold_rgb, v_use63, v_featuresUsed, v_signFeat, all_categories);
-	    analyzeResults_video(nomiVideo, v_threshold_rgb, v_use63, v_featuresUsed, v_signFeat, all_categories);
-	    analyzeResults_global(nomiVideo, v_threshold_rgb, v_use63, v_featuresUsed, v_signFeat, all_categories);
+	    for(int nm = 0; nm < numPipelines; nm++)
+	    {
+		analyzeResults_category_video(nm, nomiVideo, v_threshold_rgb, v_use63, v_featuresUsed, v_signFeat, all_categories);
+		analyzeResults_video(nm, nomiVideo, v_threshold_rgb, v_use63, v_featuresUsed, v_signFeat, all_categories);
+		analyzeResults_global(nm, nomiVideo, v_threshold_rgb, v_use63, v_featuresUsed, v_signFeat, all_categories);
+	    }
+	    return 0;
+	}
+	if(analyzePipe == true)
+	{
+	    analyzeResults_pipelines(numPipelines);
 	    return 0;
 	}
 	//resetResults funziona solo se testall è abilitato
 	if(resetresults == true)
-	    deleteResults(v_threshold_rgb, v_use63, v_featuresUsed, v_signFeat, nomiVideo, all_categories);
+	    deleteResults(numPipelines, v_threshold_rgb, v_use63, v_featuresUsed, v_signFeat, nomiVideo, all_categories);
     }
     else//testselected == true
     {
@@ -651,7 +685,7 @@ int main(int argc, char * argv[])
 	        
 		
 		if(puliscirisultati == true)
-		    pulisci_risultati(actual_use63, actual_featuresUsed, actual_signFeat, actual_punteggio16, actual_featuresSignatureCandidates, actual_grayEnabled, actual_signatureEnabled, actual_threshold_rgb, actual_matching_threshold, class_id, nomeVideo);
+		    pulisci_risultati(numPipelines, actual_use63, actual_featuresUsed, actual_signFeat, actual_punteggio16, actual_featuresSignatureCandidates, actual_grayEnabled, actual_signatureEnabled, actual_threshold_rgb, actual_matching_threshold, class_id, nomeVideo);
 		else
 		{
 		    vector<pair<string,string> > tmp_categoriesToCheck;
@@ -1030,6 +1064,91 @@ void writeLinemod(const cv::Ptr<cv::my_linemod::Detector>& detector, const std::
   }
   fs << "]"; // classes
   //fs.releaseAndGetString();
+}
+
+void checkAndWrite_bb_groundTruth(string class_id, Rect& bb, string immagineTemplate)
+{
+    int maxInt = std::numeric_limits<int>::max();
+    
+    string minWidthImg = "null";
+    int minWidth = maxInt;
+    
+    string maxWidthImg = "null";
+    int maxWidth = 0;
+    
+    string minHeightImg = "null";
+    int minHeight = maxInt;
+    
+    string maxHeightImg = "null";
+    int maxHeight = 0;
+	
+    string pathMeasures = "./templates/"+class_id+"/gtMeasures.yml";
+    if(fileExists(pathMeasures.c_str()))
+    {
+	cv::FileStorage fs(pathMeasures, cv::FileStorage::READ);
+    
+	minWidth = (int)fs["minWidth"];
+	minWidthImg = (string)fs["minWidthImg"];
+	
+	maxWidth = (int)fs["maxWidth"];
+	maxWidthImg = (string)fs["maxWidthImg"];
+	
+	minHeight = (int)fs["minHeight"];
+	minHeightImg = (string)fs["minHeightImg"];
+	
+	maxHeight = (int)fs["maxHeight"];
+	maxHeightImg = (string)fs["maxHeightImg"];
+	
+	fs.release();
+    }    
+    
+    
+    bool changed = false;
+    if(minWidth > bb.width)
+    {
+	minWidth = bb.width;
+	minWidthImg = immagineTemplate;
+	changed = true;
+    }
+    if(maxWidth < bb.width)
+    {
+	maxWidth = bb.width;
+	maxWidthImg = immagineTemplate;
+	changed = true;
+    }
+    if(minHeight > bb.height)
+    {
+	minHeight = bb.height;
+	minHeightImg = immagineTemplate;
+	changed = true;
+    }
+    if(maxHeight < bb.height)
+    {
+	maxHeight = bb.height;
+	maxHeightImg = immagineTemplate;
+	changed = true;
+    }
+    
+    if(changed == true)
+    {
+	cv::FileStorage fs(pathMeasures, cv::FileStorage::WRITE);
+	
+	fs << "minWidth" << minWidth;
+	fs << "minWidthImg" << minWidthImg;
+	
+	fs << "maxWidth" << maxWidth;
+	fs << "maxWidthImg" << maxWidthImg;
+	
+	fs << "minHeight" << minHeight;
+	fs << "minHeightImg" << minHeightImg;
+	
+	fs << "maxHeight" << maxHeight;
+	fs << "maxHeightImg" << maxHeightImg;
+	
+	fs.release();
+    }
+    
+    
 }
 
 Mat rotateImage(const Mat& source, double angle)

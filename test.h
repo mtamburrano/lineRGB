@@ -24,7 +24,7 @@ public:
 //ogni vettore deve avere almeno un elemento
 
 	v_use63.push_back(true);
-	v_use63.push_back(false);
+	//v_use63.push_back(false);
 	
 	v_featuresUsed.push_back(126);
 	
@@ -36,7 +36,7 @@ public:
 	//v_signFeat.push_back(45);
 	//v_signFeat.push_back(50);
 	
-	//v_threshold_rgb.push_back(15);
+	v_threshold_rgb.push_back(15);
 	//v_threshold_rgb.push_back(20);
 	//v_threshold_rgb.push_back(25);
 	//v_threshold_rgb.push_back(30);
@@ -45,22 +45,22 @@ public:
 	//v_threshold_rgb.push_back(45); //trainato
 	//v_threshold_rgb.push_back(50); //trainato
 	//v_threshold_rgb.push_back(55); //trainato
-	v_threshold_rgb.push_back(60);//trainato
-	v_threshold_rgb.push_back(65);//trainato
+	//v_threshold_rgb.push_back(60);//trainato
+	//v_threshold_rgb.push_back(65);//trainato
 	
 //////parametri che influenzano solo il matching
 //ogni vettore deve avere almeno un elemento	
-	//v_punteggio16.push_back(true);	
+	v_punteggio16.push_back(true);	
 	v_punteggio16.push_back(false);
 	
-	//v_featuresSignatureCandidates.push_back(true);
+	v_featuresSignatureCandidates.push_back(true);
 	v_featuresSignatureCandidates.push_back(false);
 	
 	//v_signatureEnabled.push_back(true);
 	v_signatureEnabled.push_back(false);
 	
 	
-	//v_grayEnabled.push_back(true);
+	v_grayEnabled.push_back(true);
 	v_grayEnabled.push_back(false);
 	
 	//v_matching_threshold.push_back(75);
@@ -307,17 +307,16 @@ public:
 	all_categories.erase( unique( all_categories.begin(), all_categories.end() ), all_categories.end() );
 	
 	//PER ADDESTRARE SOLO LE CATEGORIE VOLUTE//
-	/*all_categories.clear();
-	all_categories.push_back(make_pair("flashlight","1"));
-	all_categories.push_back(make_pair("flashlight","2"));
-	all_categories.push_back(make_pair("flashlight","3"));
-	all_categories.push_back(make_pair("flashlight","5"));
-	all_categories.push_back(make_pair("soda_can","1"));
-	all_categories.push_back(make_pair("soda_can","3"));
-	all_categories.push_back(make_pair("soda_can","4"));
-	all_categories.push_back(make_pair("soda_can","5"));
-	all_categories.push_back(make_pair("soda_can","6"));
-	*/
+	//all_categories.clear();
+	//all_categories.push_back(make_pair("flashlight","1"));
+	//all_categories.push_back(make_pair("flashlight","2"));
+	//all_categories.push_back(make_pair("flashlight","3"));
+	//all_categories.push_back(make_pair("flashlight","5"));
+	//all_categories.push_back(make_pair("soda_can","1"));
+	//all_categories.push_back(make_pair("soda_can","3"));
+	//all_categories.push_back(make_pair("soda_can","4"));
+	//all_categories.push_back(make_pair("soda_can","5"));
+	//all_categories.push_back(make_pair("soda_can","6"));
 	//////////////////////////////////////////
 	
 	
@@ -467,8 +466,9 @@ void getMasksFromListFile(vector<string>& listFiles);
 string getColorFromMask(string mask);
 string getDepthFromMask(string mask);
 void saveResults(bool& actual_use63, int& actual_featuresUsed, int& actual_signFeat, bool& actual_punteggio16, bool& actual_featuresSignatureCandidates, bool& actual_grayEnabled, bool& actual_signatureEnabled, int& actual_threshold_rgb, int& actual_matching_threshold, vector<VideoResult> videoResults, string class_id, string nomeVideo);
-void deleteResults(vector<int> v_threshold_rgb,vector<bool> v_use63, vector<int> v_featuresUsed, vector<int> v_signFeat, vector<string> nomiVideo, vector<pair<string,string> > all_categories);
-void analyzeResults_category_video(vector<string>& nomiVideo, vector<int> v_threshold_rgb,vector<bool> v_use63, vector<int> v_featuresUsed, vector<int> v_signFeat, vector<pair<string,string> > all_categories);
-void analyzeResults_video(vector<string>& nomiVideo, vector<int> v_threshold_rgb, vector<bool> v_use63, vector<int> v_featuresUsed, vector<int> v_signFeat, vector<pair<string,string> > all_categories);
-void analyzeResults_global(vector<string>& nomiVideo, vector<int> v_threshold_rgb, vector<bool> v_use63, vector<int> v_featuresUsed, vector<int> v_signFeat, vector<pair<string,string> > all_categories);
-void pulisci_risultati(bool& actual_use63, int& actual_featuresUsed, int& actual_signFeat, bool& actual_punteggio16, bool& actual_featuresSignatureCandidates, bool& actual_grayEnabled, bool& actual_signatureEnabled, int& actual_threshold_rgb, int& actual_matching_threshold, string class_id, string nomeVideo);
+void deleteResults(int nP, vector<int> v_threshold_rgb,vector<bool> v_use63, vector<int> v_featuresUsed, vector<int> v_signFeat, vector<string> nomiVideo, vector<pair<string,string> > all_categories);
+void analyzeResults_category_video(int nP, vector<string>& nomiVideo, vector<int> v_threshold_rgb,vector<bool> v_use63, vector<int> v_featuresUsed, vector<int> v_signFeat, vector<pair<string,string> > all_categories);
+void analyzeResults_video(int nP, vector<string>& nomiVideo, vector<int> v_threshold_rgb, vector<bool> v_use63, vector<int> v_featuresUsed, vector<int> v_signFeat, vector<pair<string,string> > all_categories);
+void analyzeResults_global(int nP, vector<string>& nomiVideo, vector<int> v_threshold_rgb, vector<bool> v_use63, vector<int> v_featuresUsed, vector<int> v_signFeat, vector<pair<string,string> > all_categories);
+void analyzeResults_pipelines(int nPipe);
+void pulisci_risultati(int nP, bool& actual_use63, int& actual_featuresUsed, int& actual_signFeat, bool& actual_punteggio16, bool& actual_featuresSignatureCandidates, bool& actual_grayEnabled, bool& actual_signatureEnabled, int& actual_threshold_rgb, int& actual_matching_threshold, string class_id, string nomeVideo);
