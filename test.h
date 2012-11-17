@@ -24,7 +24,7 @@ public:
 //ogni vettore deve avere almeno un elemento
 
 	v_use63.push_back(true);
-	//v_use63.push_back(false);
+	v_use63.push_back(false);
 	
 	v_featuresUsed.push_back(126);
 	
@@ -36,7 +36,7 @@ public:
 	//v_signFeat.push_back(45);
 	//v_signFeat.push_back(50);
 	
-	v_threshold_rgb.push_back(15);
+	//v_threshold_rgb.push_back(15);
 	//v_threshold_rgb.push_back(20);
 	//v_threshold_rgb.push_back(25);
 	//v_threshold_rgb.push_back(30);
@@ -44,9 +44,12 @@ public:
 	//v_threshold_rgb.push_back(40);
 	//v_threshold_rgb.push_back(45); //trainato
 	//v_threshold_rgb.push_back(50); //trainato
-	//v_threshold_rgb.push_back(55); //trainato
-	//v_threshold_rgb.push_back(60);//trainato
-	//v_threshold_rgb.push_back(65);//trainato
+	v_threshold_rgb.push_back(55); //trainato
+	v_threshold_rgb.push_back(60);//trainato
+	v_threshold_rgb.push_back(65);//trainato
+	v_threshold_rgb.push_back(70);//trainato
+	v_threshold_rgb.push_back(75);//trainato
+	v_threshold_rgb.push_back(80);//trainato
 	
 //////parametri che influenzano solo il matching
 //ogni vettore deve avere almeno un elemento	
@@ -56,8 +59,8 @@ public:
 	v_featuresSignatureCandidates.push_back(true);
 	v_featuresSignatureCandidates.push_back(false);
 	
-	//v_signatureEnabled.push_back(true);
-	v_signatureEnabled.push_back(false);
+	v_signatureEnabled.push_back(true);
+	//v_signatureEnabled.push_back(false);
 	
 	
 	v_grayEnabled.push_back(true);
@@ -162,14 +165,14 @@ public:
 	//all_categories.push_back(make_pair("bowl","2"));
 	//all_categories.push_back(make_pair("bowl","3"));
 	//all_categories.push_back(make_pair("bowl","4"));
-	//all_categories.push_back(make_pair("cap","1"));
+	all_categories.push_back(make_pair("cap","1"));
 	//all_categories.push_back(make_pair("cap","3"));
 	//all_categories.push_back(make_pair("cap","4"));
 	//all_categories.push_back(make_pair("flashlight","1"));
 	//all_categories.push_back(make_pair("flashlight","2"));
 	//all_categories.push_back(make_pair("flashlight","3"));
 	//all_categories.push_back(make_pair("flashlight","5"));
-	all_categories.push_back(make_pair("soda_can","1"));
+	//all_categories.push_back(make_pair("soda_can","1"));
 	//all_categories.push_back(make_pair("soda_can","3"));
 	//all_categories.push_back(make_pair("soda_can","5"));
 	//all_categories.push_back(make_pair("soda_can","6"));
@@ -372,6 +375,8 @@ public:
     int nItem;
     int frameNumber;
     vector<Item> items;
+    //item scartati a causa perchè ground truth troppo piccola o troppo grande rispetto i template
+    vector<Item> discardedItems;
 };
 
 class TestVideo
@@ -458,7 +463,8 @@ string getItemNumber(int number, int nElements);
 string getFormattedCategory(string category, int instance);
 TestVideo getTestVideo(string pathVideoMat);
 void drawGroundTruth(VideoFrame videoFrame, cv::Mat& dst);
-void checkFrameFalses(vector<my_linemod::Match> matches, VideoFrame videoFrame, vector<pair<string,string> > categoriesToCheck, cv::Ptr<my_linemod::Detector> detector, VideoResult& videoResult, Mat& dst);
+void checkFrameFalses(vector<my_linemod::Match> matches, VideoFrame videoFrame, vector<pair<string,string> > categoriesToCheck, cv::Ptr<my_linemod::Detector> detector, VideoResult& videoResult, Mat& dst, bool displayRects);
+bool isScaledWithGroundTruth(Item item);
 void printFalsesResult(VideoResult vr);
 bool fileExists(const char * path);
 void readDirectory(const char* dirname, vector<string>& listFiles);

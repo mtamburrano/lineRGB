@@ -11,7 +11,7 @@ using namespace cv;
 
 static bool DEBUGGING = false;
 static bool TESTING = true;
-static int numPipelines = 8;
+static int numPipelines = 2;
 static int curMatch = 0;
 static bool checkMinMaxBB = false;
 
@@ -524,7 +524,10 @@ int main(int argc, char * argv[])
 	}
 	//resetResults funziona solo se testall è abilitato
 	if(resetresults == true)
+	{
 	    deleteResults(numPipelines, v_threshold_rgb, v_use63, v_featuresUsed, v_signFeat, nomiVideo, all_categories);
+	    return 0;
+	}
     }
     else//testselected == true
     {
@@ -788,8 +791,11 @@ int main(int argc, char * argv[])
 					break;
 				}
 			    
+				bool displayRects = false;
+				if(nm == curMatch)
+				    displayRects = true;
 				//controllo falsi negativi e falsi positivi
-				checkFrameFalses(matches[nm], tv.frames.at(current-1), tmp_categoriesToCheck, detector, videoResults[nm], display);
+				checkFrameFalses(matches[nm], tv.frames.at(current-1), tmp_categoriesToCheck, detector, videoResults[nm], display, displayRects);
 			    }
 			    for (int i = 0; TESTING == false && (i < (int)matches[curMatch].size()) && (classes_visited < num_classes); ++i)
 			    {
@@ -986,11 +992,11 @@ void drawResponse(const std::vector<cv::my_linemod::Template>& templates,
                 rectangle(dst, cv::Point(Bgt.x,Bgt.y), cv::Point(Bgt.x+Bgt.width,Bgt.y+Bgt.height), blue, 2);
                 rectangle(dst, cv::Point(Ba.x,Ba.y), cv::Point(Ba.x+Ba.width,Ba.y+Ba.height), yellow, 2);
                 
-                /*if(result >= 0.5)
+                if(result >= 0.4)
                     cv::circle(dst, cv::Point(Ba.x+Ba.width/2,Ba.y+Ba.height/2), 15, green, -1);
                 else
                     cv::circle(dst, cv::Point(Ba.x+Ba.width/2,Ba.y+Ba.height/2), 15, red, -1);
-                */
+                
             }
         }
     }

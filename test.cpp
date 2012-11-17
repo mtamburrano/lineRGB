@@ -17,7 +17,7 @@
 using namespace std;
 using namespace cv;
 
-
+static bool discardGroundTruth = true;
 
 
 
@@ -419,6 +419,7 @@ TestVideo getTestVideo(string pathVideoMat)
             
             vf = VideoFrame(nItems, i+1);
             vector<Item> vfItems = vector<Item>();
+            vector<Item> vfDiscardedItems = vector<Item>();
             
             for (int j = 0; j<nItems; j++)
             {
@@ -534,10 +535,15 @@ TestVideo getTestVideo(string pathVideoMat)
                     tvCategories.push_back(category);
                     
                 Item item = Item(Icategory, Iinstance, Ibottom, Itop, Ileft, Iright);
-                vfItems.push_back(item);
-
+                //controllo se la ground truth è troppo piccola o troppo grande rispetto i template
+                if(discardGroundTruth == false || isScaledWithGroundTruth(item))
+                    vfItems.push_back(item);
+                else
+                    vfDiscardedItems.push_back(item);
             }
             vf.items = vfItems;
+            vf.discardedItems = vfDiscardedItems;
+            vf.nItem -= vfDiscardedItems.size();
             vFrames.push_back(vf);
         }
         
@@ -569,6 +575,62 @@ TestVideo getTestVideo(string pathVideoMat)
 */
       
     return tv;
+}
+
+bool isScaledWithGroundTruth(Item item)
+{
+    string class_id = getFormattedCategory(item.category, item.instance);
+    int itemWidth = item.right-item.left;
+    int itemHeight = item.bottom-item.top;
+
+    int minWidth;
+    int maxWidth;
+    int minHeight;
+    int maxHeight;
+	
+    string pathMeasures = "./templates/"+class_id+"/gtMeasures.yml";
+    if(fileExists(pathMeasures.c_str()))
+    {
+        cv::FileStorage fs(pathMeasures, cv::FileStorage::READ);
+        
+        minWidth = (int)fs["minWidth"];
+        maxWidth = (int)fs["maxWidth"];
+        minHeight = (int)fs["minHeight"];
+        maxHeight = (int)fs["maxHeight"];
+        
+        fs.release();
+    } 
+    
+    bool accepted = true;
+    int minAccept = 110;
+    int maxAccept = 110;
+    /*if(class_id == "soda_can_1")
+    {
+    cout<<"prima minW: "<<minWidth<<endl;
+    cout<<"prima minH: "<<minHeight<<endl;
+    cout<<"prima maxW: "<<maxWidth<<endl;
+    cout<<"prima maxH: "<<maxHeight<<endl;
+    }*/
+    
+    minWidth = (int)(((float)minWidth/100) * minAccept);
+    minHeight = (int)(((float)minHeight/100) * minAccept);
+    maxWidth = (int)(((float)maxWidth/100) * maxAccept);
+    maxHeight = (int)(((float)maxHeight/100) * maxAccept);
+    
+    /*if(class_id == "soda_can_1")
+    {
+    cout<<"dopo minW: "<<minWidth<<endl;
+    cout<<"dopo minH: "<<minHeight<<endl;
+    cout<<"dopo maxW: "<<maxWidth<<endl;
+    cout<<"dopo maxH: "<<maxHeight<<endl;
+    }*/
+
+    if(itemWidth <= minWidth || itemWidth >= maxWidth)
+        accepted = false;
+    if(itemHeight <= minHeight || itemHeight >= maxHeight)
+        accepted = false;
+    
+    return accepted;
 }
 
 void drawGroundTruth(VideoFrame videoFrame, cv::Mat& dst)
@@ -643,13 +705,14 @@ bool isTheRightItem(Item item, my_linemod::Match m, const std::vector<cv::my_lin
         return false;
 }
 
-void checkFrameFalses(vector<my_linemod::Match> matches, VideoFrame videoFrame, vector<pair<string,string> > categoriesToCheck, cv::Ptr<my_linemod::Detector> detector, VideoResult& videoResult, Mat& dst)
+void checkFrameFalses(vector<my_linemod::Match> matches, VideoFrame videoFrame, vector<pair<string,string> > categoriesToCheck, cv::Ptr<my_linemod::Detector> detector, VideoResult& videoResult, Mat& dst, bool displayRects)
 {
     
     const cv::Scalar green = CV_RGB(0,255,0);
     const cv::Scalar red = CV_RGB(255,0,0);
     const cv::Scalar purple = CV_RGB(204,51,153);
     const cv::Scalar yellow = CV_RGB(255,255,0);
+    const cv::Scalar black = CV_RGB(0,0,0);
     
     int num_modalities = 1;
     int num_classes = categoriesToCheck.size();
@@ -698,7 +761,8 @@ void checkFrameFalses(vector<my_linemod::Match> matches, VideoFrame videoFrame, 
 
                 FalsePositive fp = FalsePositive(m.class_id, m.similarity, videoFrame.frameNumber, Ba);
                 
-                rectangle(dst, cv::Point(Ba.x,Ba.y), cv::Point(Ba.x+Ba.width,Ba.y+Ba.height), purple, 2);
+                if(displayRects == true)
+                    rectangle(dst, cv::Point(Ba.x,Ba.y), cv::Point(Ba.x+Ba.width,Ba.y+Ba.height), purple, 2);
                 
                 map<string, CategoryResult> ::iterator itCat;
                 itCat = videoResult.mapCategoryResult.find(m.class_id);
@@ -723,8 +787,8 @@ void checkFrameFalses(vector<my_linemod::Match> matches, VideoFrame videoFrame, 
             
             FalseNegative fn = FalseNegative(formattedCategory, videoFrame.frameNumber, Bgt);
             
-                
-            rectangle(dst, cv::Point(Bgt.x,Bgt.y), cv::Point(Bgt.x+Bgt.width,Bgt.y+Bgt.height), red, 2);
+            if(displayRects == true)
+                rectangle(dst, cv::Point(Bgt.x,Bgt.y), cv::Point(Bgt.x+Bgt.width,Bgt.y+Bgt.height), red, 2);
             
             map<string, CategoryResult> ::iterator itCat;
             itCat = videoResult.mapCategoryResult.find(formattedCategory);
@@ -733,6 +797,23 @@ void checkFrameFalses(vector<my_linemod::Match> matches, VideoFrame videoFrame, 
             cr->nFalseNegative++;
             videoResult.nFalseNegative++;
         }
+    }
+    
+    //disegno le ground truth scartate
+    for(int i = 0; i<videoFrame.discardedItems.size(); i++)
+    {
+        Item item = videoFrame.discardedItems.at(i);
+        if(isItemToCheck(categoriesToCheck, item))
+        {
+            Rect_<int> sctGT = Rect_<int>(item.left, item.top, item.right-item.left, item.bottom-item.top);
+            if(displayRects == true)
+            {
+                rectangle(dst, cv::Point(sctGT.x,sctGT.y), cv::Point(sctGT.x+sctGT.width,sctGT.y+sctGT.height), black, 3);
+                string text = "Width: "+intToString(sctGT.width) + " - Height: " + intToString(sctGT.height); 
+                putText(dst, text, cv::Point(sctGT.x,sctGT.y-5), FONT_HERSHEY_SIMPLEX, 1, yellow); 
+            }
+        }
+                
     }
 
 }

@@ -4033,6 +4033,9 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
 			score_combined = (score + score_rgb)/2;
 			break;
 		    case 1:
+			score_combined = (score + score_rgb)/2;
+			break;
+		    /*
 			score_combined = ((score/100) * 30) + ((score_rgb/100)*70);
 			break;
 		    case 2:
@@ -4052,7 +4055,7 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
 			break;
 		    case 7:
 			score_combined = ((score/100) * 20) + ((score_rgb/100)*80);
-			break;
+			break;*/
 		    default:
 			cout<<"errore: "<<nm<<endl;
 			CV_Assert(false);
@@ -4095,6 +4098,15 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
 		    actualCandidates.erase(new_end, actualCandidates.end());
 		    break;
 		case 1:
+		    new_end = std::remove_if(actualCandidates.begin(), actualCandidates.end(),
+								    MatchPredicate(threshold));
+		    actualCandidates.erase(new_end, actualCandidates.end());
+		    
+		    new_end_rgb = std::remove_if(actualCandidates.begin(), actualCandidates.end(),
+								    MatchPredicateRGB(threshold));
+		    actualCandidates.erase(new_end_rgb, actualCandidates.end());
+		    break;
+		    /*
 		    new_end = std::remove_if(actualCandidates.begin(), actualCandidates.end(),
 								    MatchPredicateCombined(threshold));
 		    actualCandidates.erase(new_end, actualCandidates.end());
@@ -4144,7 +4156,7 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
 		    new_end_rgb = std::remove_if(actualCandidates.begin(), actualCandidates.end(),
 								    MatchPredicateRGB(threshold));
 		    actualCandidates.erase(new_end_rgb, actualCandidates.end());
-		    break;
+		    break;*/
 		default:
 			cout<<"errore: "<<nm<<endl;
 			CV_Assert(false);
