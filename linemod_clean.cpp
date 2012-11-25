@@ -12,7 +12,7 @@ using namespace cv;
 static bool DEBUGGING = false;
 static bool TESTING = true;
 static int numPipelines = 2;
-static int curMatch = 0;
+static int curMatch = 1;
 static bool checkMinMaxBB = false;
 
 // Adapted from cv_timer in cv_utilities
@@ -390,7 +390,7 @@ int main(int argc, char * argv[])
 					cv::resize(mask, maskDst, Size(), resizeFactor, resizeFactor, CV_INTER_CUBIC);
 				    }
 				}
-				if(DEBUGGING)imshow("color_scaled_"+intToString(iter), singleSourceDst);
+				//if(DEBUGGING)imshow("color_scaled_"+intToString(iter), singleSourceDst);
 				for(int iterRot = 0; iterRot < 3; iterRot++)
 				{
 				    double rotationFactor = rotations[iterRot];
@@ -424,10 +424,10 @@ int main(int argc, char * argv[])
 				    if(DEBUGGING == true && iterRot == 2)
 				    {
 					const std::vector<cv::my_linemod::Template>& templates = detector->getTemplates(class_id, template_id);
-					for (int l = 0; l < (int)templates[0].features.size(); ++l)
+					for (int l = 0; l < (int)templates[0].featuresSignature.size(); ++l)
 					{
 					  cv::Scalar colorT;
-					  cv::my_linemod::Feature f = templates[0].features[l];
+					  cv::my_linemod::Feature f = templates[0].featuresSignature[l];
 					  cv::Point pt(f.x + bb.x, f.y +bb.y);
 					  switch(f.rgbLabel)
 					  {
@@ -442,7 +442,7 @@ int main(int argc, char * argv[])
 					  } 
 					 //if(f.onBorder == true)
 					    rectangle(singleSourceFinal, bb, CV_RGB(0,0,0), 2);
-					    cv::circle(singleSourceFinal, pt, 2, colorT);
+					    cv::circle(singleSourceFinal, pt, 1, colorT);
 					}
 					if(DEBUGGING)imshow("color_rotated_featured"+intToString(iterRot), singleSourceFinal);
 					

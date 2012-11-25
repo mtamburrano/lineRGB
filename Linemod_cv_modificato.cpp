@@ -676,19 +676,10 @@ bool isBlackMag(int r, int g, int b)
 
 unsigned char get_RGB_quantization(unsigned short r, unsigned short g, unsigned short b, unsigned short index_best, int threshold, bool& grayWhiteOrBlack)
 {
-	unsigned short lower_thresh = 50;
+/*	unsigned short lower_thresh = 50;
 	unsigned short low_red_and_blu_thresh = 15;
 	
-	/*if(index_best == 0)
-	    if(r<low_red_and_blu_thresh)
-		return 128;
-	if(index_best == 1)
-	    if(g<low_red_and_blu_thresh)
-		return 128;
-	if(index_best == 2)
-	    if(b<low_red_and_blu_thresh)
-		return 128;
-	*/
+
 	if(index_best == 0 || index_best == 2)
 	{
 	    unsigned short tmp_c;
@@ -700,7 +691,7 @@ unsigned char get_RGB_quantization(unsigned short r, unsigned short g, unsigned 
 	    if(tmp_c<=lower_thresh)
 		threshold = low_red_and_blu_thresh;
 	}
-    
+  */  
 	//abilita/disabilita
 	//low_red_and_blu_thresh = threshold;
     
@@ -1610,9 +1601,12 @@ bool ColorGradientPyramid::extractTemplate(Template& templ) const
   waitKey(0);
   */
 
-
-  
-  int stepSign = (int)sqrt(maskArea/(float)signFeat);
+  //cout<<"MASKAREA: "<<maskArea<<endl;
+  int signCoef = signFeat;
+  if(pyramid_level == 1)
+    signCoef = signCoef/2;
+  int stepSign = (int)sqrt(maskArea/(float)signCoef);
+  int onBorderCount = 0;
   
   for (int r = 0; r < magnitude.rows; ++r)
   {
@@ -1672,6 +1666,7 @@ bool ColorGradientPyramid::extractTemplate(Template& templ) const
 		    //votazione dei colori vicini
 		    uchar voted = votesRgbMag(c,r,score, quantized, rgb, whiteOrBlack, magnitude, mask, centralMass);
 		    candidates.push_back(Candidate(c, r, getLabel(quantized), getLabel(isGrayWhite(voted, whiteOrBlack[r][c])), true, score));
+		    onBorderCount++;
 		}
 		else
 		    candidates.push_back(Candidate(c, r, getLabel(quantized), getLabel(isGrayWhite(quantizedRgb, whiteOrBlack[r][c])), false, score));
@@ -1681,7 +1676,10 @@ bool ColorGradientPyramid::extractTemplate(Template& templ) const
 		quantCountThreshold++;
 		
 		if(border_mask_r[c])
+		{
 		    candidates.push_back(Candidate(c, r, getLabel(quantized), getLabel(isGrayWhite(quantizedRgb, whiteOrBlack[r][c])), true, score));
+		    onBorderCount++;
+		}
 		else
 		    candidates.push_back(Candidate(c, r, getLabel(quantized), getLabel(isGrayWhite(quantizedRgb, whiteOrBlack[r][c])), false, score));
 	    }
@@ -1693,37 +1691,12 @@ bool ColorGradientPyramid::extractTemplate(Template& templ) const
     
   }
   
+  
     Mat local_mask_temp(local_mask.cols, local_mask.rows, CV_8UC3, CV_RGB(100,100,100));
     //local_mask.copyTo(local_mask_temp);
     //cvtColor(local_mask_temp, local_mask_temp, CV_GRAY2RGB);
     
-    if(DEBUGGING)
-    {
-	for (int itS = 0; itS < templ.featuresSignature.size(); itS++)
-	{
-	    cv::my_linemod::Feature featS = templ.featuresSignature.at(itS);
-	    
-	    cv::Scalar colorT;
-	    cv::Point pt(featS.x, featS.y);
-	    switch(featS.rgbLabel)
-	    {
-		case 0: colorT = CV_RGB(255,0,0); break;
-		case 1: colorT = CV_RGB(0,255,0); break;
-		case 2: colorT = CV_RGB(0,0,255); break;
-		case 3: colorT = CV_RGB(255,255,0); break;
-		case 4: colorT = CV_RGB(255,0,255); break;
-		case 5: colorT = CV_RGB(0,255,255); break;
-		case 6: colorT = CV_RGB(255,255,255); break;
-		case 7: colorT = CV_RGB(0,0,0); break;
-	    }
-	    cv::circle(local_mask_temp, pt, 0, colorT);
-	
-	}
-	imshow("mask senza features signature"+increment,local_mask);
-	imshow("mask con features signature"+increment,local_mask_temp);
-	increment = "small";
-	std::cout<<"num features signature: "<<templ.featuresSignature.size()<<std::endl;
-  }
+    
   
   if(DEBUGGING) std::cout<<"quantCount: "<<quantCount<<std::endl;
   if(DEBUGGING) std::cout<<"quantCountThreshold: "<<quantCountThreshold<<std::endl;
@@ -1756,10 +1729,43 @@ bool ColorGradientPyramid::extractTemplate(Template& templ) const
       imshow("in EXTRACTTEMPLATE:",tmp);
   }
   
+  if(onBorderCount <= (candidates.size()/2))
+  {
+    templ.featuresSignature.clear();
+  }
   
   // Use heuristic based on surplus of candidates in narrow outline for initial distance threshold
   float distance = static_cast<float>(candidates.size() / num_features + 1);
   selectScatteredFeatures(candidates, templ.features, num_features, distance);
+  
+  
+  if(DEBUGGING)
+    {
+	for (int itS = 0; itS < templ.featuresSignature.size(); itS++)
+	{
+	    cv::my_linemod::Feature featS = templ.featuresSignature.at(itS);
+	    
+	    cv::Scalar colorT;
+	    cv::Point pt(featS.x, featS.y);
+	    switch(featS.rgbLabel)
+	    {
+		case 0: colorT = CV_RGB(255,0,0); break;
+		case 1: colorT = CV_RGB(0,255,0); break;
+		case 2: colorT = CV_RGB(0,0,255); break;
+		case 3: colorT = CV_RGB(255,255,0); break;
+		case 4: colorT = CV_RGB(255,0,255); break;
+		case 5: colorT = CV_RGB(0,255,255); break;
+		case 6: colorT = CV_RGB(255,255,255); break;
+		case 7: colorT = CV_RGB(0,0,0); break;
+	    }
+	    cv::circle(local_mask_temp, pt, 0, colorT);
+	
+	}
+	imshow("mask senza features signature"+increment,local_mask);
+	imshow("mask con features signature"+increment,local_mask_temp);
+	increment = "small";
+	std::cout<<"num features signature: "<<templ.featuresSignature.size()<<std::endl;
+  }
 
   if(DEBUGGING)
   {

@@ -23,33 +23,27 @@ public:
 //////parametri che influenzano i template
 //ogni vettore deve avere almeno un elemento
 
-	v_use63.push_back(true);
+	//v_use63.push_back(true);
 	v_use63.push_back(false);
 	
 	v_featuresUsed.push_back(126);
 	
 	//v_signFeat.push_back(20);
 	//v_signFeat.push_back(25);
-	v_signFeat.push_back(30);
+	//v_signFeat.push_back(30);
 	//v_signFeat.push_back(35);
 	//v_signFeat.push_back(40);
 	//v_signFeat.push_back(45);
 	//v_signFeat.push_back(50);
-	
-	//v_threshold_rgb.push_back(15);
-	//v_threshold_rgb.push_back(20);
-	//v_threshold_rgb.push_back(25);
-	//v_threshold_rgb.push_back(30);
-	//v_threshold_rgb.push_back(35);
-	//v_threshold_rgb.push_back(40);
-	//v_threshold_rgb.push_back(45); //trainato
-	//v_threshold_rgb.push_back(50); //trainato
+	//v_signFeat.push_back(100);	
+	v_signFeat.push_back(150);
+
 	v_threshold_rgb.push_back(55); //trainato
 	v_threshold_rgb.push_back(60);//trainato
 	v_threshold_rgb.push_back(65);//trainato
 	v_threshold_rgb.push_back(70);//trainato
 	v_threshold_rgb.push_back(75);//trainato
-	v_threshold_rgb.push_back(80);//trainato
+
 	
 //////parametri che influenzano solo il matching
 //ogni vettore deve avere almeno un elemento	
@@ -57,7 +51,7 @@ public:
 	v_punteggio16.push_back(false);
 	
 	v_featuresSignatureCandidates.push_back(true);
-	v_featuresSignatureCandidates.push_back(false);
+	//v_featuresSignatureCandidates.push_back(false);
 	
 	v_signatureEnabled.push_back(true);
 	//v_signatureEnabled.push_back(false);
@@ -67,6 +61,11 @@ public:
 	v_grayEnabled.push_back(false);
 	
 	//v_matching_threshold.push_back(75);
+	//v_matching_threshold.push_back(75);
+	//v_matching_threshold.push_back(76);
+	//v_matching_threshold.push_back(77);
+	//v_matching_threshold.push_back(78);
+	//v_matching_threshold.push_back(79);
 	v_matching_threshold.push_back(80);
 	//v_matching_threshold.push_back(85);
 	
@@ -105,20 +104,20 @@ public:
     {
 	//parametri dei template
 	//
-	actual_use63 = true; //default true
-	actual_featuresUsed = 63; //default 63
+	actual_use63 = false; //default true
+	actual_featuresUsed = 126; //default 63
 	
-	actual_signFeat = 30; //default 30
+	actual_signFeat = 150; //default 30
 	
-	actual_threshold_rgb = 55; //default 45
+	actual_threshold_rgb = 70; //default 45
 	
 	//parametri del matching
 	//	
-	actual_punteggio16 = false; //default true
+	actual_punteggio16 = true; //default true
 	
 	actual_featuresSignatureCandidates = true; //default true
 	
-	actual_grayEnabled = true;  //default true
+	actual_grayEnabled = false;  //default true
 	
 	actual_signatureEnabled = true; //default true
 	
@@ -130,9 +129,9 @@ public:
 	if(isConverted == true)
 	    converted = "converted/";
 	
-	//cartelleVideo.push_back("video/rgbd-scenes/kitchen_small/kitchen_small_1/" + converted);
-	//filesGroundTruth.push_back("/media/TeraDati/HD Manu Clarabella/dataset rgbd/video/rgbd-scenes/kitchen_small/test.hdf5");
-	//nomiVideo.push_back("kitchen_small_1");
+	cartelleVideo.push_back("video/rgbd-scenes/kitchen_small/kitchen_small_1/" + converted);
+	filesGroundTruth.push_back("/media/TeraDati/HD Manu Clarabella/dataset rgbd/video/rgbd-scenes/kitchen_small/test.hdf5");
+	nomiVideo.push_back("kitchen_small_1");
 	
 	//cartelleVideo.push_back("video/rgbd-scenes/desk/desk_1/" + converted);
 	//filesGroundTruth.push_back("/media/TeraDati/HD Manu Clarabella/dataset rgbd/video/rgbd-scenes/desk/test_desk_1.hdf5");
@@ -146,9 +145,9 @@ public:
 	//filesGroundTruth.push_back("/media/TeraDati/HD Manu Clarabella/dataset rgbd/video/rgbd-scenes/desk/test_desk_3.hdf5");
 	//nomiVideo.push_back("desk_3");
 	
-	cartelleVideo.push_back("video/rgbd-scenes/meeting_small/meeting_small_1/" + converted);
-	filesGroundTruth.push_back("/media/TeraDati/HD Manu Clarabella/dataset rgbd/video/rgbd-scenes/meeting_small/test_meeting.hdf5");
-	nomiVideo.push_back("meeting_small_1");
+	//cartelleVideo.push_back("video/rgbd-scenes/meeting_small/meeting_small_1/" + converted);
+	//filesGroundTruth.push_back("/media/TeraDati/HD Manu Clarabella/dataset rgbd/video/rgbd-scenes/meeting_small/test_meeting.hdf5");
+	//nomiVideo.push_back("meeting_small_1");
 	
 	//cartelleVideo.push_back("video/rgbd-scenes/table/table_1/" + converted);
 	//filesGroundTruth.push_back("/media/TeraDati/HD Manu Clarabella/dataset rgbd/video/rgbd-scenes/table/test_table.hdf5");
@@ -165,15 +164,16 @@ public:
 	//all_categories.push_back(make_pair("bowl","2"));
 	//all_categories.push_back(make_pair("bowl","3"));
 	//all_categories.push_back(make_pair("bowl","4"));
-	all_categories.push_back(make_pair("cap","1"));
+	//all_categories.push_back(make_pair("cap","1"));
 	//all_categories.push_back(make_pair("cap","3"));
 	//all_categories.push_back(make_pair("cap","4"));
 	//all_categories.push_back(make_pair("flashlight","1"));
 	//all_categories.push_back(make_pair("flashlight","2"));
 	//all_categories.push_back(make_pair("flashlight","3"));
-	//all_categories.push_back(make_pair("flashlight","5"));
+	all_categories.push_back(make_pair("flashlight","5"));
 	//all_categories.push_back(make_pair("soda_can","1"));
 	//all_categories.push_back(make_pair("soda_can","3"));
+	//all_categories.push_back(make_pair("soda_can","4"));
 	//all_categories.push_back(make_pair("soda_can","5"));
 	//all_categories.push_back(make_pair("soda_can","6"));
 	//all_categories.push_back(make_pair("coffee_mug","1"));
@@ -310,16 +310,22 @@ public:
 	all_categories.erase( unique( all_categories.begin(), all_categories.end() ), all_categories.end() );
 	
 	//PER ADDESTRARE SOLO LE CATEGORIE VOLUTE//
-	//all_categories.clear();
-	//all_categories.push_back(make_pair("flashlight","1"));
-	//all_categories.push_back(make_pair("flashlight","2"));
-	//all_categories.push_back(make_pair("flashlight","3"));
-	//all_categories.push_back(make_pair("flashlight","5"));
-	//all_categories.push_back(make_pair("soda_can","1"));
-	//all_categories.push_back(make_pair("soda_can","3"));
-	//all_categories.push_back(make_pair("soda_can","4"));
-	//all_categories.push_back(make_pair("soda_can","5"));
-	//all_categories.push_back(make_pair("soda_can","6"));
+	/*all_categories.clear();
+	all_categories.push_back(make_pair("flashlight","1"));
+	all_categories.push_back(make_pair("flashlight","2"));
+	all_categories.push_back(make_pair("flashlight","3"));
+	all_categories.push_back(make_pair("flashlight","5"));
+	all_categories.push_back(make_pair("soda_can","1"));
+	all_categories.push_back(make_pair("soda_can","3"));
+	all_categories.push_back(make_pair("soda_can","4"));
+	all_categories.push_back(make_pair("soda_can","5"));
+	all_categories.push_back(make_pair("soda_can","6"));
+	all_categories.push_back(make_pair("cap","1"));
+	all_categories.push_back(make_pair("cap","3"));
+	all_categories.push_back(make_pair("cap","4"));
+	/*
+	all_categories.clear();
+	all_categories.push_back(make_pair("flashlight","5"));*/
 	//////////////////////////////////////////
 	
 	
