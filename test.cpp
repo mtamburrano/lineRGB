@@ -681,7 +681,7 @@ bool isItemToCheck(vector<pair<string,string> > categoriesToCheck, Item item)
     return result;
 }
 
-bool isTheRightItem(Item item, my_linemod::Match m, const std::vector<cv::my_linemod::Template>& templates)
+bool isTheRightItem(Item item, my_linemod::Match m, const std::vector<cv::my_linemod::Template>& templates)//,bool checkAllMatches)
 {
     Point offset = Point(m.x, m.y);
     string class_id = m.class_id;
@@ -695,6 +695,13 @@ bool isTheRightItem(Item item, my_linemod::Match m, const std::vector<cv::my_lin
         float areaIntersection = (float)intersection.area();
         float areaUnion = (float)(Bgt.area()+Ba.area())-areaIntersection;
         float result = areaIntersection/areaUnion;
+        
+      /*  //se sto controllando TUTTI i match, escludo dai falsi positivi i risultati che sono dentro il riquadro della ground truth, perchè dovuti a scale
+        if(checkAllMatches == true)
+        {
+            if(Bgt.area()/areaUnion > 0.9 && areaIntersection > (Ba.area())/2)
+                return true;
+        }*/
         
         if(result >= 0.4)
             return true;
@@ -732,15 +739,61 @@ void checkFrameFalses(vector<my_linemod::Match> matches, VideoFrame videoFrame, 
     int classes_visited = 0;
     std::set<std::string> visited;
     
-    for(int i = 0; (i < (int)matches.size()) && (classes_visited < num_classes); i++)
+    bool checkAllMatches = true;
+    
+    if(checkAllMatches == false)
     {
-        //se non è stato trovato almeno una gt attesa, c'è un falso positivo
-        bool foundAtLeastOne = false;
-        my_linemod::Match m = matches[i];
-        
-        if (visited.insert(m.class_id).second)
+        for(int i = 0; (i < (int)matches.size()) && (classes_visited < num_classes); i++)
         {
-            ++classes_visited;
+            //se non è stato trovato almeno una gt attesa, c'è un falso positivo
+            bool foundAtLeastOne = false;
+            my_linemod::Match m = matches[i];
+            
+            if (visited.insert(m.class_id).second)
+            {
+                ++classes_visited;
+                
+                const vector<my_linemod::Template>& templates = detector->getTemplates(m.class_id, m.template_id);
+                for ( it=gtMap.begin() ; it != gtMap.end(); it++ )
+                {
+                    
+                    if(isTheRightItem((*it).first, m, templates) == true)
+                    {
+                        
+                        foundAtLeastOne = true;
+                        (*it).second = true;
+                    }
+                }
+                if(foundAtLeastOne == false)
+                {
+                    //FALSO POSITIVO
+                    Point offset = Point(m.x, m.y);
+                    Rect_<int> Ba = Rect_<int>(offset.x, offset.y, (offset.x+templates[num_modalities-1].width - offset.x), (offset.y+templates[num_modalities-1].height - offset.y));
+
+                    FalsePositive fp = FalsePositive(m.class_id, m.similarity, videoFrame.frameNumber, Ba);
+                    
+                    if(displayRects == true)
+                        rectangle(dst, cv::Point(Ba.x,Ba.y), cv::Point(Ba.x+Ba.width,Ba.y+Ba.height), purple, 2);
+                    
+                    map<string, CategoryResult> ::iterator itCat;
+                    itCat = videoResult.mapCategoryResult.find(m.class_id);
+                    CategoryResult* cr = &(*itCat).second;
+                    cr->arrayFalsePositive.push_back(fp);
+                    cr->nFalsePositive++;
+                    videoResult.nFalsePositive++;
+                }
+            
+            }
+            
+        }
+    }
+    else //checkAllMatches == true
+    {
+        for(int i = 0; i < (int)matches.size(); i++)
+        {
+            //se non è stato trovato almeno una gt attesa, c'è un falso positivo
+            bool foundAtLeastOne = false;
+            my_linemod::Match m = matches[i];
             
             const vector<my_linemod::Template>& templates = detector->getTemplates(m.class_id, m.template_id);
             for ( it=gtMap.begin() ; it != gtMap.end(); it++ )
@@ -771,9 +824,9 @@ void checkFrameFalses(vector<my_linemod::Match> matches, VideoFrame videoFrame, 
                 cr->nFalsePositive++;
                 videoResult.nFalsePositive++;
             }
-        
+            
         }
-        
+
     }
     
     for ( it=gtMap.begin() ; it != gtMap.end(); it++ )

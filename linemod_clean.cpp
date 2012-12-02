@@ -11,8 +11,8 @@ using namespace cv;
 
 static bool DEBUGGING = false;
 static bool TESTING = true;
-static int numPipelines = 2;
-static int curMatch = 1;
+static int numPipelines = 1;
+static int curMatch = 0;
 static bool checkMinMaxBB = false;
 
 // Adapted from cv_timer in cv_utilities
@@ -779,7 +779,7 @@ int main(int argc, char * argv[])
 			    for(int nm = 0; nm<numPipelines; nm++)
 			    {
 			    //elimina scartati
-				vector<cv::my_linemod::Match>::iterator it;
+				/*vector<cv::my_linemod::Match>::iterator it;
 				for (it=matches[nm].begin(); it<matches[nm].end(); it++)
 				{
 				    if((*it).scartato == 1)
@@ -789,50 +789,93 @@ int main(int argc, char * argv[])
 				    }
 				    else
 					break;
-				}
-			    
+				}*/			    
 				bool displayRects = false;
 				if(nm == curMatch)
 				    displayRects = true;
 				//controllo falsi negativi e falsi positivi
 				checkFrameFalses(matches[nm], tv.frames.at(current-1), tmp_categoriesToCheck, detector, videoResults[nm], display, displayRects);
 			    }
-			    for (int i = 0; TESTING == false && (i < (int)matches[curMatch].size()) && (classes_visited < num_classes); ++i)
-			    {
-			      //VISUALIZZO SOLO IL CURMATCH DELLA PIPELINE
-			      cv::my_linemod::Match m = matches[curMatch][i];
-
-			      if (visited.insert(m.class_id).second)
-			      {
-				++classes_visited;
-				  
-				  printf("Similarity: %5.1f%%; Similarity_rgb: %5.1f%%; x: %3d; y: %3d; class: %s; template: %3d",
-					 m.similarity, m.similarity_rgb, m.x, m.y, m.class_id.c_str(), m.template_id);
-					 
-				  if(templateMap.find(m.class_id + "_" + intToString(m.template_id)) != templateMap.end())
-				  {
-
-				    if(DEBUGGING) 
-					{
-					    Mat tempMatched;
-					    tempMatched = imread((*templateMap.find(m.class_id + "_" + intToString(m.template_id))).second, 1);
-					    imshow("template matchato:", tempMatched);
-					    //cout<<", template name: "<< (*templateMap.find(m.class_id + "_" + intToString(m.template_id))).second<<endl;
-					}
-					else
-					    if(DEBUGGING) cout<<endl;
-				    }
-				
-				// Draw matching template
-				if(!TESTING)
-				{
-				    const std::vector<cv::my_linemod::Template>& templates = detector->getTemplates(m.class_id, m.template_id);
-				    drawResponse(templates, num_modalities, display, cv::Point(m.x, m.y), detector->getT(0), m.scartato, m.class_id.c_str(), tv.frames.at(current-1));
-				}
-				
-			      }
-			    }
 			    
+			    bool checkAllMatches = true;
+			    
+			    if(checkAllMatches == false)
+			    {
+				for (int i = 0; TESTING == false && (i < (int)matches[curMatch].size()) && (classes_visited < num_classes); ++i)
+				{
+				  //VISUALIZZO SOLO IL CURMATCH DELLA PIPELINE
+				  cv::my_linemod::Match m = matches[curMatch][i];
+
+				  if (visited.insert(m.class_id).second)
+				  {
+				    ++classes_visited;
+				      
+				      printf("Similarity: %5.1f%%; Similarity_rgb: %5.1f%%; x: %3d; y: %3d; class: %s; template: %3d",
+					     m.similarity, m.similarity_rgb, m.x, m.y, m.class_id.c_str(), m.template_id);
+					     
+				      if(templateMap.find(m.class_id + "_" + intToString(m.template_id)) != templateMap.end())
+				      {
+
+					if(DEBUGGING) 
+					    {
+						Mat tempMatched;
+						tempMatched = imread((*templateMap.find(m.class_id + "_" + intToString(m.template_id))).second, 1);
+						imshow("template matchato:", tempMatched);
+						//cout<<", template name: "<< (*templateMap.find(m.class_id + "_" + intToString(m.template_id))).second<<endl;
+					    }
+					    else
+						if(DEBUGGING) cout<<endl;
+					}
+				    
+				    // Draw matching template
+				    if(!TESTING)
+				    {
+					const std::vector<cv::my_linemod::Template>& templates = detector->getTemplates(m.class_id, m.template_id);
+					drawResponse(templates, num_modalities, display, cv::Point(m.x, m.y), detector->getT(0), m.scartato, m.class_id.c_str(), tv.frames.at(current-1));
+				    }
+				    
+				  }
+				  
+				  
+				  
+				}
+			    }
+			    else //checkAllMatches == false
+			    {
+				for (int i = 0; TESTING == false && i < (int)matches[curMatch].size(); ++i)
+				{
+				  //VISUALIZZO SOLO IL CURMATCH DELLA PIPELINE
+				  cv::my_linemod::Match m = matches[curMatch][i];
+
+				      
+				      printf("Similarity: %5.1f%%; Similarity_rgb: %5.1f%%; x: %3d; y: %3d; class: %s; template: %3d",
+					     m.similarity, m.similarity_rgb, m.x, m.y, m.class_id.c_str(), m.template_id);
+					     
+				      if(templateMap.find(m.class_id + "_" + intToString(m.template_id)) != templateMap.end())
+				      {
+
+					if(DEBUGGING) 
+					    {
+						Mat tempMatched;
+						tempMatched = imread((*templateMap.find(m.class_id + "_" + intToString(m.template_id))).second, 1);
+						imshow("template matchato:", tempMatched);
+						//cout<<", template name: "<< (*templateMap.find(m.class_id + "_" + intToString(m.template_id))).second<<endl;
+					    }
+					    else
+						if(DEBUGGING) cout<<endl;
+					}
+				    
+				    // Draw matching template
+				    if(!TESTING)
+				    {
+					const std::vector<cv::my_linemod::Template>& templates = detector->getTemplates(m.class_id, m.template_id);
+					drawResponse(templates, num_modalities, display, cv::Point(m.x, m.y), detector->getT(0), m.scartato, m.class_id.c_str(), tv.frames.at(current-1));
+				    }
+				  
+				  
+				  
+				}
+			    }
 			    if (!TESTING && matches[curMatch].empty())
 			      printf("No matches found...\n");
 			    if (!TESTING)

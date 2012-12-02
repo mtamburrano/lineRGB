@@ -23,20 +23,22 @@ public:
 //////parametri che influenzano i template
 //ogni vettore deve avere almeno un elemento
 
-	//v_use63.push_back(true);
+	//v_use63.push_back(true);        //ORIGINAL
 	v_use63.push_back(false);
 	
-	v_featuresUsed.push_back(126);
+	v_featuresUsed.push_back(126);      //ORIGINAL
 	
 	//v_signFeat.push_back(20);
 	//v_signFeat.push_back(25);
-	//v_signFeat.push_back(30);
+	//v_signFeat.push_back(30);      //ORIGINAL
 	//v_signFeat.push_back(35);
 	//v_signFeat.push_back(40);
 	//v_signFeat.push_back(45);
 	//v_signFeat.push_back(50);
 	//v_signFeat.push_back(100);	
 	v_signFeat.push_back(150);
+
+	//v_threshold_rgb.push_back(45); //ORIGINAL
 
 	v_threshold_rgb.push_back(55); //trainato
 	v_threshold_rgb.push_back(60);//trainato
@@ -48,17 +50,17 @@ public:
 //////parametri che influenzano solo il matching
 //ogni vettore deve avere almeno un elemento	
 	v_punteggio16.push_back(true);	
-	v_punteggio16.push_back(false);
+	//v_punteggio16.push_back(false);   //ORIGINAL
 	
 	v_featuresSignatureCandidates.push_back(true);
-	//v_featuresSignatureCandidates.push_back(false);
+	v_featuresSignatureCandidates.push_back(false);  //ORIGINAL
 	
 	v_signatureEnabled.push_back(true);
-	//v_signatureEnabled.push_back(false);
+	v_signatureEnabled.push_back(false);  //ORIGINAL
 	
 	
-	v_grayEnabled.push_back(true);
-	v_grayEnabled.push_back(false);
+	//v_grayEnabled.push_back(true);
+	v_grayEnabled.push_back(false);  //ORIGINAL
 	
 	//v_matching_threshold.push_back(75);
 	//v_matching_threshold.push_back(75);
@@ -66,7 +68,7 @@ public:
 	//v_matching_threshold.push_back(77);
 	//v_matching_threshold.push_back(78);
 	//v_matching_threshold.push_back(79);
-	v_matching_threshold.push_back(80);
+	v_matching_threshold.push_back(80);  //ORIGINAL
 	//v_matching_threshold.push_back(85);
 	
     }
@@ -109,7 +111,7 @@ public:
 	
 	actual_signFeat = 150; //default 30
 	
-	actual_threshold_rgb = 70; //default 45
+	actual_threshold_rgb = 65; //default 45
 	
 	//parametri del matching
 	//	
@@ -168,9 +170,9 @@ public:
 	//all_categories.push_back(make_pair("cap","3"));
 	//all_categories.push_back(make_pair("cap","4"));
 	//all_categories.push_back(make_pair("flashlight","1"));
-	//all_categories.push_back(make_pair("flashlight","2"));
+	all_categories.push_back(make_pair("flashlight","2"));
 	//all_categories.push_back(make_pair("flashlight","3"));
-	all_categories.push_back(make_pair("flashlight","5"));
+	//all_categories.push_back(make_pair("flashlight","5"));
 	//all_categories.push_back(make_pair("soda_can","1"));
 	//all_categories.push_back(make_pair("soda_can","3"));
 	//all_categories.push_back(make_pair("soda_can","4"));
@@ -310,7 +312,7 @@ public:
 	all_categories.erase( unique( all_categories.begin(), all_categories.end() ), all_categories.end() );
 	
 	//PER ADDESTRARE SOLO LE CATEGORIE VOLUTE//
-	/*all_categories.clear();
+/*	all_categories.clear();
 	all_categories.push_back(make_pair("flashlight","1"));
 	all_categories.push_back(make_pair("flashlight","2"));
 	all_categories.push_back(make_pair("flashlight","3"));

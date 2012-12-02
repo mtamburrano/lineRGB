@@ -410,6 +410,8 @@ struct CV_EXPORTS Match
   std::string class_id;
   int template_id;
   short scartato;
+  int width;
+  int height;
 };
 
 /**
