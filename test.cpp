@@ -12,7 +12,8 @@
 #include "hdf5_hl.h"
 
 #include "test.h"
-
+#include <iomanip>
+#include <fstream>
 
 using namespace std;
 using namespace cv;
@@ -130,7 +131,7 @@ void printFalsesResult(VideoResult vr)
     cout<<"Positivi attesi: "<<vr.positivesExpected<<endl;
     cout<<"False Positives: "<<vr.nFalsePositive<<endl;
     cout<<"False Negatives: "<<vr.nFalseNegative<<endl;
-    /*cout<<"Categorie contenute: "<<endl;
+    cout<<"Categorie contenute: "<<endl;
     
     
     for(int k = 0; k<vr.categoriesChecked.size(); k++)
@@ -151,7 +152,7 @@ void printFalsesResult(VideoResult vr)
         //VideoFrame vf = tv.frames.at(i);
         //cout<<"  Oggetti contenuti: "<<vf.nItem<<endl;
         
-    }*/
+    }
 }
 
 void printTestVideo(TestVideo tv)
@@ -271,6 +272,28 @@ int stringToInt(string s)
     ss >> number;
     
     return number;
+}
+
+string floatToString(float f)
+{
+stringstream ss;
+
+  ss << std::fixed << std::setprecision( 2 ) << f;
+
+  string sfloat;
+ ss >> sfloat;
+  return sfloat;
+}
+
+float stringToFloat(string s)
+{
+stringstream ss;
+
+  ss << s;
+
+  float f;
+ ss >> f;
+  return f;
 }
 
 string intToString(int number)
@@ -681,7 +704,7 @@ bool isItemToCheck(vector<pair<string,string> > categoriesToCheck, Item item)
     return result;
 }
 
-bool isTheRightItem(Item item, my_linemod::Match m, const std::vector<cv::my_linemod::Template>& templates)//,bool checkAllMatches)
+bool isTheRightItem(Item item, my_linemod::Match m, const std::vector<cv::my_linemod::Template>& templates)
 {
     Point offset = Point(m.x, m.y);
     string class_id = m.class_id;
@@ -696,12 +719,6 @@ bool isTheRightItem(Item item, my_linemod::Match m, const std::vector<cv::my_lin
         float areaUnion = (float)(Bgt.area()+Ba.area())-areaIntersection;
         float result = areaIntersection/areaUnion;
         
-      /*  //se sto controllando TUTTI i match, escludo dai falsi positivi i risultati che sono dentro il riquadro della ground truth, perchè dovuti a scale
-        if(checkAllMatches == true)
-        {
-            if(Bgt.area()/areaUnion > 0.9 && areaIntersection > (Ba.area())/2)
-                return true;
-        }*/
         
         if(result >= 0.4)
             return true;
@@ -711,6 +728,362 @@ bool isTheRightItem(Item item, my_linemod::Match m, const std::vector<cv::my_lin
     else
         return false;
 }
+
+void creaGraficiGoogle()
+{
+    bool terzoenabled = false;
+    
+    
+    string pathOriginal = "./cartella_grafici/original/Precision_recall.yml";
+    string pathRgb = "./cartella_grafici/rgb/Precision_recall.yml";
+    string pathTerzo = "./cartella_grafici/terzo/Precision_recall.yml";
+    
+    
+    
+    vector<string> matching;
+    for(int i=100; i>=50; i-=2)
+        matching.push_back(intToString(i));
+    
+    vector<string> precisionOriginal;
+    vector<string> recallOriginal;
+    vector<string> precisionRgb;
+    vector<string> recallRgb;
+    vector<string> precisionTerzo;
+    vector<string> recallTerzo;
+    
+    if(fileExists(pathOriginal.c_str()))
+    {
+            cv::FileStorage fs(pathOriginal, cv::FileStorage::READ);
+            for(int i =0; i<matching.size(); i++)
+            {
+                string index = "Matching "+matching[i];
+                cv::FileNode fn = fs[index];
+                cv::FileNodeIterator i = fn.begin();
+                if(i != fn.end())
+                {
+                    precisionOriginal.push_back(((string)(*i)["Precision"]));
+                    recallOriginal.push_back(((string)(*i)["Recall"]));
+                }
+
+            }
+            fs.release();
+            
+            
+            
+    }
+    else
+        cout<<"FILE original NON TROVATO"<<endl;
+    
+    if(fileExists(pathRgb.c_str()))
+    {
+            cv::FileStorage fs(pathRgb, cv::FileStorage::READ);
+            for(int i =0; i<matching.size(); i++)
+            {
+                string index = "Matching "+matching[i];
+                cv::FileNode fn = fs[index];
+                cv::FileNodeIterator i = fn.begin();
+                if(i != fn.end())
+                {
+                    precisionRgb.push_back(((string)(*i)["Precision"]));
+                    recallRgb.push_back(((string)(*i)["Recall"]));
+                }
+
+            }
+            fs.release();
+            
+            
+            
+    }
+    else
+        cout<<"FILE rgb NON TROVATO"<<endl;
+    
+    if(terzoenabled == true)
+    {
+        if(fileExists(pathTerzo.c_str()))
+        {
+                cv::FileStorage fs(pathTerzo, cv::FileStorage::READ);
+                for(int i =0; i<matching.size(); i++)
+                {
+                    string index = "Matching "+matching[i];
+                    cv::FileNode fn = fs[index];
+                    cv::FileNodeIterator i = fn.begin();
+                    if(i != fn.end())
+                    {
+                        precisionTerzo.push_back(((string)(*i)["Precision"]));
+                        recallTerzo.push_back(((string)(*i)["Recall"]));
+                    }
+
+                }
+                fs.release();
+                
+                
+                
+        }
+        else
+            cout<<"FILE rgb NON TROVATO"<<endl;
+    }
+    //porto la precision recall in scala a 100 e li risalvo in stringa
+    vector<int> precisionOriginalInt;
+    vector<int> recallOriginalInt;
+    vector<int> precisionRgbInt;
+    vector<int> recallRgbInt;
+    vector<int> precisionTerzoInt;
+    vector<int> recallTerzoInt;
+    
+    for(int i = 0; i<precisionOriginal.size(); i++)
+    {
+        precisionOriginalInt.push_back((int)(stringToFloat(precisionOriginal[i])*100));
+        recallOriginalInt.push_back((int)(stringToFloat(recallOriginal[i])*100));
+    }
+    for(int i = 0; i<precisionRgb.size(); i++)
+    {
+        precisionRgbInt.push_back((int)(stringToFloat(precisionRgb[i])*100));
+        recallRgbInt.push_back((int)(stringToFloat(recallRgb[i])*100));
+    }
+    if(terzoenabled == true)
+        for(int i = 0; i<precisionTerzo.size(); i++)
+        {
+            precisionTerzoInt.push_back((int)(stringToFloat(precisionTerzo[i])*100));
+            recallTerzoInt.push_back((int)(stringToFloat(recallTerzo[i])*100));
+        }
+        
+    precisionOriginal.clear();
+    recallOriginal.clear();
+    precisionRgb.clear();
+    recallRgb.clear();
+    precisionTerzo.clear();
+    recallTerzo.clear();
+    for(int i = 0; i<precisionOriginalInt.size(); i++)
+    {
+        precisionOriginal.push_back(intToString(precisionOriginalInt[i]));
+        recallOriginal.push_back(intToString(recallOriginalInt[i]));
+    }
+    for(int i = 0; i<precisionRgbInt.size(); i++)
+    {
+        precisionRgb.push_back(intToString(precisionRgbInt[i]));
+        recallRgb.push_back(intToString(recallRgbInt[i]));
+    }
+    if(terzoenabled == true)
+        for(int i = 0; i<precisionTerzoInt.size(); i++)
+        {
+            precisionTerzo.push_back(intToString(precisionTerzoInt[i]));
+            recallTerzo.push_back(intToString(recallTerzoInt[i]));
+        }
+    
+
+    string grafo = "http://chart.apis.google.com/chart\n";
+    grafo = grafo + "?chs=400x200\n";
+    grafo = grafo + "&cht=lxy\n";
+    grafo = grafo + "&chxt=x,x,y,y\n";
+    grafo = grafo + "&chxl=1:|SPACE|3:|SPA\n";
+    grafo = grafo + "&chxp=1,50|3,50\n";
+    grafo = grafo + "&chxr=0,0,1,0.2|2,0,1,0.2\n";
+    grafo = grafo + "&chco=FF0000,0000FF,00FF00\n";
+    grafo = grafo + "&chdl=LINE2D|LINERGB_1";
+    if(terzoenabled == true)
+        grafo = grafo + "|LINERGB_2\n";
+    else
+        grafo = grafo + "\n";
+    grafo = grafo + "&chd=t:";
+   
+    for(int j = 0; j<recallOriginal.size(); j++)
+    {
+        grafo = grafo + recallOriginal[j];
+        if(j != recallOriginal.size() -1)
+            grafo = grafo + ",";
+    }
+    grafo = grafo + "|";
+    for(int j = 0; j<precisionOriginal.size(); j++)
+    {
+        grafo = grafo + precisionOriginal[j];
+        if(j != precisionOriginal.size() -1)
+            grafo = grafo + ",";
+    }
+    grafo = grafo + "|"; 
+    for(int j = 0; j<recallRgb.size(); j++)
+    {
+        grafo = grafo + recallRgb[j];
+        if(j != recallRgb.size() -1)
+            grafo = grafo + ",";
+    }
+    grafo = grafo + "|";
+    for(int j = 0; j<precisionRgb.size(); j++)
+    {
+        grafo = grafo + precisionRgb[j];
+        if(j != precisionRgb.size() -1)
+            grafo = grafo + ",";
+    }
+    if(terzoenabled== true)
+    {
+        grafo = grafo + "|"; 
+        for(int j = 0; j<recallTerzo.size(); j++)
+        {
+            grafo = grafo + recallTerzo[j];
+            if(j != recallTerzo.size() -1)
+                grafo = grafo + ",";
+        }
+        grafo = grafo + "|";
+        for(int j = 0; j<precisionTerzo.size(); j++)
+        {
+            grafo = grafo + precisionTerzo[j];
+            if(j != precisionTerzo.size() -1)
+                grafo = grafo + ",";
+        }
+    }
+    ofstream myfile;
+    myfile.open ("./cartella_grafici/grafo.txt");
+    myfile << grafo;
+    myfile.close();
+    
+
+}
+
+void creaTuttiGraficiGoogle(vector<pair<string,string> > all_categories)
+{
+    for(int w = 0; w<all_categories.size(); w++)
+    {
+        pair<string,string> category = all_categories.at(w);
+        string class_id = category.first + "_" + category.second;
+        
+        string pathOriginal = "./cartella_grafici/original/precisionClassi/" + class_id + "/" + class_id + "_Precision_recall.yml";
+        string pathRgb = "./cartella_grafici/rgb/precisionClassi/" + class_id + "/" + class_id + "_Precision_recall.yml";
+        
+        vector<string> matching;
+        for(int i=100; i>=50; i-=2)
+            matching.push_back(intToString(i));
+        
+        vector<string> precisionOriginal;
+        vector<string> recallOriginal;
+        vector<string> precisionRgb;
+        vector<string> recallRgb;
+        
+        if(fileExists(pathOriginal.c_str()))
+        {
+                cv::FileStorage fs(pathOriginal, cv::FileStorage::READ);
+                for(int i =0; i<matching.size(); i++)
+                {
+                    string index = "Matching "+matching[i];
+                    cv::FileNode fn = fs[index];
+                    cv::FileNodeIterator i = fn.begin();
+                    if(i != fn.end())
+                    {
+                        precisionOriginal.push_back(((string)(*i)["Precision"]));
+                        recallOriginal.push_back(((string)(*i)["Recall"]));
+                    }
+
+                }
+                fs.release();
+                
+                
+                
+        }
+        else
+            cout<<"FILE original NON TROVATO"<<endl;
+        
+        if(fileExists(pathRgb.c_str()))
+        {
+                cv::FileStorage fs(pathRgb, cv::FileStorage::READ);
+                for(int i =0; i<matching.size(); i++)
+                {
+                    string index = "Matching "+matching[i];
+                    cv::FileNode fn = fs[index];
+                    cv::FileNodeIterator i = fn.begin();
+                    if(i != fn.end())
+                    {
+                        precisionRgb.push_back(((string)(*i)["Precision"]));
+                        recallRgb.push_back(((string)(*i)["Recall"]));
+                    }
+
+                }
+                fs.release();
+                
+                
+                
+        }
+        else
+            cout<<"FILE rgb NON TROVATO"<<endl;
+        
+        //porto la precision recall in scala a 100 e li risalvo in stringa
+        vector<int> precisionOriginalInt;
+        vector<int> recallOriginalInt;
+        vector<int> precisionRgbInt;
+        vector<int> recallRgbInt;
+        for(int i = 0; i<precisionOriginal.size(); i++)
+        {
+            precisionOriginalInt.push_back((int)(stringToFloat(precisionOriginal[i])*100));
+            recallOriginalInt.push_back((int)(stringToFloat(recallOriginal[i])*100));
+        }
+        for(int i = 0; i<precisionRgb.size(); i++)
+        {
+            precisionRgbInt.push_back((int)(stringToFloat(precisionRgb[i])*100));
+            recallRgbInt.push_back((int)(stringToFloat(recallRgb[i])*100));
+        }
+        precisionOriginal.clear();
+        recallOriginal.clear();
+        precisionRgb.clear();
+        recallRgb.clear();
+        for(int i = 0; i<precisionOriginalInt.size(); i++)
+        {
+            precisionOriginal.push_back(intToString(precisionOriginalInt[i]));
+            recallOriginal.push_back(intToString(recallOriginalInt[i]));
+        }
+        for(int i = 0; i<precisionRgbInt.size(); i++)
+        {
+            precisionRgb.push_back(intToString(precisionRgbInt[i]));
+            recallRgb.push_back(intToString(recallRgbInt[i]));
+        }
+        
+
+        string grafo = "http://chart.apis.google.com/chart\n";
+        grafo = grafo + "?chs=400x200\n";
+        grafo = grafo + "&cht=lxy\n";
+        grafo = grafo + "&chxt=x,x,y,y\n";
+        grafo = grafo + "&chxl=1:|SPACE|3:|SPA\n";
+        grafo = grafo + "&chxp=1,50|3,50\n";
+        grafo = grafo + "&chxr=0,0,1,0.2|2,0,1,0.2\n";
+        grafo = grafo + "&chco=FF0000,0000FF,00FF00\n";
+        grafo = grafo + "&chdl=LINE2D|LINERGB\n";
+        grafo = grafo + "&chtt=Istanza: "+class_id+"\n";
+        grafo = grafo + "&chd=t:";
+       
+        for(int j = 0; j<recallOriginal.size(); j++)
+        {
+            grafo = grafo + recallOriginal[j];
+            if(j != recallOriginal.size() -1)
+                grafo = grafo + ",";
+        }
+        grafo = grafo + "|";
+        for(int j = 0; j<precisionOriginal.size(); j++)
+        {
+            grafo = grafo + precisionOriginal[j];
+            if(j != precisionOriginal.size() -1)
+                grafo = grafo + ",";
+        }
+        grafo = grafo + "|"; 
+        for(int j = 0; j<recallRgb.size(); j++)
+        {
+            grafo = grafo + recallRgb[j];
+            if(j != recallRgb.size() -1)
+                grafo = grafo + ",";
+        }
+        grafo = grafo + "|";
+        for(int j = 0; j<precisionRgb.size(); j++)
+        {
+            grafo = grafo + precisionRgb[j];
+            if(j != precisionRgb.size() -1)
+                grafo = grafo + ",";
+        }
+        
+        ofstream myfile;
+        string dest = "./cartella_grafici/precisionClassi/" + class_id + "/" + class_id + "_grafo.txt"; 
+        myfile.open (dest.c_str());
+        myfile << grafo;
+        myfile.close();
+
+    }
+
+}
+
 
 void checkFrameFalses(vector<my_linemod::Match> matches, VideoFrame videoFrame, vector<pair<string,string> > categoriesToCheck, cv::Ptr<my_linemod::Detector> detector, VideoResult& videoResult, Mat& dst, bool displayRects)
 {
@@ -723,7 +1096,7 @@ void checkFrameFalses(vector<my_linemod::Match> matches, VideoFrame videoFrame, 
     
     int num_modalities = 1;
     int num_classes = categoriesToCheck.size();
-    
+    cout<<"IN TEST: "<<num_classes<<endl;
     //ottengo tutte le ground truth da controllare e le metto in una mappa, per poter poi controllare se sono state rispettate o meno (falsi negativi)
     map<Item,bool> gtMap;
     map<Item,bool> ::iterator it;
@@ -739,7 +1112,7 @@ void checkFrameFalses(vector<my_linemod::Match> matches, VideoFrame videoFrame, 
     int classes_visited = 0;
     std::set<std::string> visited;
     
-    bool checkAllMatches = true;
+    bool checkAllMatches = false;
     
     if(checkAllMatches == false)
     {
@@ -773,8 +1146,21 @@ void checkFrameFalses(vector<my_linemod::Match> matches, VideoFrame videoFrame, 
                     FalsePositive fp = FalsePositive(m.class_id, m.similarity, videoFrame.frameNumber, Ba);
                     
                     if(displayRects == true)
+                    {
                         rectangle(dst, cv::Point(Ba.x,Ba.y), cv::Point(Ba.x+Ba.width,Ba.y+Ba.height), purple, 2);
-                    
+                        //string text = m.class_id; 
+                        //putText(dst, text, cv::Point(Ba.x-10,Ba.y-5), FONT_HERSHEY_SIMPLEX, 1, yellow); 
+                        if(m.class_id == "flashlight_2")
+                        {
+                            string text = "flashlight_red";
+                            putText(dst, text, cv::Point(Ba.x-10,Ba.y-5), FONT_HERSHEY_SIMPLEX, 1, red); 
+                        }
+                        else if(m.class_id == "flashlight_5")
+                        {
+                            string text = "flashlight_yellow";
+                            putText(dst, text, cv::Point(Ba.x-10,Ba.y-5), FONT_HERSHEY_SIMPLEX, 1, yellow); 
+                        }
+                    }
                     map<string, CategoryResult> ::iterator itCat;
                     itCat = videoResult.mapCategoryResult.find(m.class_id);
                     CategoryResult* cr = &(*itCat).second;
@@ -853,18 +1239,16 @@ void checkFrameFalses(vector<my_linemod::Match> matches, VideoFrame videoFrame, 
     }
     
     //disegno le ground truth scartate
-    for(int i = 0; i<videoFrame.discardedItems.size(); i++)
+    for(int i = 0; displayRects == true && i<videoFrame.discardedItems.size(); i++)
     {
         Item item = videoFrame.discardedItems.at(i);
         if(isItemToCheck(categoriesToCheck, item))
         {
             Rect_<int> sctGT = Rect_<int>(item.left, item.top, item.right-item.left, item.bottom-item.top);
-            if(displayRects == true)
-            {
-                rectangle(dst, cv::Point(sctGT.x,sctGT.y), cv::Point(sctGT.x+sctGT.width,sctGT.y+sctGT.height), black, 3);
-                string text = "Width: "+intToString(sctGT.width) + " - Height: " + intToString(sctGT.height); 
-                putText(dst, text, cv::Point(sctGT.x,sctGT.y-5), FONT_HERSHEY_SIMPLEX, 1, yellow); 
-            }
+
+            rectangle(dst, cv::Point(sctGT.x,sctGT.y), cv::Point(sctGT.x+sctGT.width,sctGT.y+sctGT.height), black, 3);
+            //string text = "Width: "+intToString(sctGT.width) + " - Height: " + intToString(sctGT.height); 
+            //putText(dst, text, cv::Point(sctGT.x,sctGT.y-5), FONT_HERSHEY_SIMPLEX, 1, yellow); 
         }
                 
     }
@@ -2415,6 +2799,493 @@ void analyzeResults_global(int nPipe, vector<string>& nomiVideo, vector<int> v_t
     
     
 }
+
+bool checkPrecisionRecall(int nPipe, vector<string>& nomiVideo, int actual_threshold_rgb, bool actual_use63, int actual_featuresUsed, int actual_signFeat, vector<pair<string,string> > all_categories, bool analyzeCurrentResults)
+{
+    string pipeline = "pipeline_" + intToString(nPipe);
+    
+    //< mappa<parametriUsati, valore_parametro>
+    map<string, int> map_expectedPositive;
+    map<string, int> map_falsePositive;
+    map<string, int> map_falseNegative;
+    map<string, int> map_falsePosNeg;    
+    
+    vector<int> indexMatching;
+    
+    for(int w = 0; w<all_categories.size(); w++)
+    {
+        cout<<"."<<flush;
+		pair<string,string> category = all_categories.at(w);
+        string class_id = category.first + "_" + category.second;
+        
+        string string_use63 = "use63-" + boolToString(actual_use63);
+        string string_threshold = "thresholdRGB-" + intToString(actual_threshold_rgb);
+        string string_featuresUsed = "featuresUsed-" + intToString(actual_featuresUsed);
+        string string_signFeat = "signFeat-" + intToString(actual_signFeat);
+        
+        for(int test10 = 0; test10<nomiVideo.size(); test10++)
+        {
+            string nomeVideo;
+            nomeVideo = nomiVideo.at(test10);
+        
+            string pathRes = "./results/" + pipeline + "/" + nomeVideo + "/" + class_id + "/" + string_use63 + "_" + string_featuresUsed + "_" + string_signFeat + "_" + string_threshold + ".yml";
+            if(fileExists(pathRes.c_str()))
+            {
+                cv::FileStorage fs(pathRes, cv::FileStorage::READ);
+        
+                vector<bool> vr_punteggio16;
+                vector<bool> vr_featuresSignatureCandidates;
+                vector<bool> vr_signatureEnabled;
+                vector<bool> vr_grayEnabled;
+                vector<int> vr_matching_threshold;
+                vector<int> vr_exp_positives;
+                vector<int> vr_nFalsePositives;
+                vector<int> vr_nFalseNegatives;
+                
+                
+                
+                int errorNegatives = 0;
+                if(nomeVideo == "kitchen_small_1")
+                {
+                    if(class_id == "flashlight_2")
+                        errorNegatives =1;
+                    if(class_id == "flashlight_5")
+                        errorNegatives =3;
+                    if(class_id == "soda_can_1")
+                        errorNegatives =0;
+                    if(class_id == "soda_can_6")
+                        errorNegatives =1;
+                    if(class_id == "cap_1")
+                        errorNegatives =2;
+                }
+                if(nomeVideo == "desk_1")
+                {
+                    if(class_id == "soda_can_6")
+                        errorNegatives =2;
+                    if(class_id == "cap_4")
+                        errorNegatives =5;
+                }
+                if(nomeVideo == "desk_2")
+                {
+                    if(class_id == "flashlight_1")
+                        errorNegatives =6;
+                    if(class_id == "soda_can_4")
+                        errorNegatives =3;
+                }
+                if(nomeVideo == "desk_3")
+                {
+                    if(class_id == "flashlight_3")
+                        errorNegatives =15;
+                    if(class_id == "flashlight_5")
+                        errorNegatives =11;
+                }
+                if(nomeVideo == "meeting_small_1")
+                {
+                    if(class_id == "cap_1")
+                        errorNegatives =0;
+                    if(class_id == "cap_3")
+                        errorNegatives =3;
+                    if(class_id == "flashlight_2")
+                        errorNegatives =9;
+                    if(class_id == "flashlight_5")
+                        errorNegatives =9;
+                    if(class_id == "soda_can_1")
+                        errorNegatives =8;
+                    if(class_id == "soda_can_3")
+                        errorNegatives =0;
+                    if(class_id == "soda_can_5")
+                        errorNegatives =1;
+                }
+                if(nomeVideo == "table_1")
+                {
+                    if(class_id == "cap_1")
+                        errorNegatives =0;
+                    if(class_id == "cap_4")
+                        errorNegatives =5;
+                    if(class_id == "flashlight_3")
+                        errorNegatives =12;
+                    if(class_id == "soda_can_4")
+                        errorNegatives =1;
+                }
+                if(nomeVideo == "table_small_1")
+                {
+                    if(class_id == "soda_can_3")
+                        errorNegatives =0;
+                    if(class_id == "cap_1")
+                        errorNegatives =0;
+                }
+                if(nomeVideo == "table_small_2")
+                {
+                    if(class_id == "cap_4")
+                        errorNegatives =21;
+                    if(class_id == "soda_can_1")
+                        errorNegatives =0;
+                }
+                
+                cv::FileNode fn = fs["tests"];
+                for (cv::FileNodeIterator i = fn.begin(); i != fn.end(); ++i)
+                {
+                    vr_punteggio16.push_back(((int)(*i)["punteggio16"]));
+                    vr_featuresSignatureCandidates.push_back(((int)(*i)["featuresSignCand"]));
+                    vr_signatureEnabled.push_back(((int)(*i)["signatureEnabled"]));
+                    vr_grayEnabled.push_back(((int)(*i)["grayEnabled"]));
+                    vr_matching_threshold.push_back((*i)["matching"]);
+                    
+                    int matching = (*i)["matching"];
+                    bool found = false;
+                    for(int m = 0; m<indexMatching.size(); m++)
+                        if(indexMatching[m] == matching)
+                            found = true;
+                    if(found == false)
+                        indexMatching.push_back(matching);
+                    
+                    
+                    int correctExp = (*i)["Expected positives"];
+                    correctExp -= errorNegatives;
+                    if(correctExp < 0)
+                        correctExp = 0;
+                    int correctFN = (*i)["False Negatives"];
+                    correctFN -= errorNegatives;
+                    if(correctFN < 0)
+                        correctFN = 0;
+                    
+                    vr_exp_positives.push_back(correctExp);
+                    vr_nFalsePositives.push_back((*i)["False Positives"]);
+                    vr_nFalseNegatives.push_back(correctFN);
+                }
+                
+                fs.release();
+                
+                
+
+                for(int res = 0; res<vr_matching_threshold.size(); res++)
+                {
+                    
+                    string string_matching = "matching-" + intToString(vr_matching_threshold.at(res));
+                    
+                    string parameters = string_matching;
+                    
+                    int actual_exp_positives = vr_exp_positives.at(res);
+                    int actual_fp = vr_nFalsePositives.at(res);
+                    int actual_fn = vr_nFalseNegatives.at(res);
+                    int actual_fpfn = actual_fp + actual_fn;
+                    
+                    map_expectedPositive[parameters] = map_expectedPositive[parameters] + actual_exp_positives;
+                    map_falsePositive[parameters] = map_falsePositive[parameters] + actual_fp;
+                    map_falseNegative[parameters] = map_falseNegative[parameters] + actual_fn;
+                    map_falsePosNeg[parameters] = map_falsePosNeg[parameters] + actual_fpfn;
+                    
+                }
+
+            }
+        }
+    }
+    cout<<endl;    
+        
+    string dirVideo = "./results/" + pipeline + "/Precision_recall.yml";
+    
+    if(map_expectedPositive.size() != indexMatching.size())
+    {
+        cout<<"QUALCOSA NON VA!!!!!!!!!!!!!"<<endl;
+        return false;
+    }
+    cv::FileStorage fs_best(dirVideo, cv::FileStorage::WRITE);
+    
+    if(indexMatching[0] < indexMatching[1])
+            reverse(indexMatching.begin(),indexMatching.end());
+        
+        cout<<"match: ";
+        for(int ord = 0; ord<indexMatching.size(); ord++)
+            cout<<indexMatching[ord]<<"-";
+        cout<<endl;
+    
+    for(int jk=0; jk<map_expectedPositive.size(); jk++)
+    {
+        string constParameters = "matching-"+intToString(indexMatching[jk]);
+        int ep = map_expectedPositive[constParameters];
+        int fp = map_falsePositive[constParameters];
+        int fn = map_falseNegative[constParameters];
+        int tp = ep - fn;
+        float precision;
+        float recall;
+        if((tp + fp) == 0)
+            precision = 1;
+        else
+            precision = (float)tp/((float)tp + (float)fp);
+        if((tp + fn) == 0)
+            recall = 1;
+        else
+            recall =  (float)tp/((float)tp + (float)fn);
+        
+        fs_best << "Matching "+intToString(indexMatching[jk]) << "[";
+            fs_best << "{";
+                fs_best <<"Expected positives"<<ep;
+                fs_best <<"False Positives"<<fp;
+                fs_best <<"False Negatives"<<fn;
+                fs_best <<"Precision"<<floatToString(precision);
+                fs_best <<"Recall"<<floatToString(recall);
+            fs_best << "}";
+        fs_best << "]";
+        
+        
+        if(recall > 0.95 || precision < 0.05)
+        {
+            fs_best.release();
+            return false;
+        }
+    }
+    
+    fs_best.release();
+    return true;
+    
+    
+}
+
+bool checkSinglePrecisionRecall(int nPipe, vector<string>& nomiVideo, int actual_threshold_rgb, bool actual_use63, int actual_featuresUsed, int actual_signFeat, vector<pair<string,string> > all_categories, bool analyzeCurrentResults)
+{
+    string pipeline = "pipeline_" + intToString(nPipe);
+    
+    //< mappa<parametriUsati, valore_parametro>
+    map<string, int> map_expectedPositive;
+    map<string, int> map_falsePositive;
+    map<string, int> map_falseNegative;
+    map<string, int> map_falsePosNeg;    
+    
+    vector<int> indexMatching;
+    
+    for(int w = 0; w<all_categories.size(); w++)
+    {
+        cout<<"."<<flush;
+		pair<string,string> category = all_categories.at(w);
+        string class_id = category.first + "_" + category.second;
+        
+        string string_use63 = "use63-" + boolToString(actual_use63);
+        string string_threshold = "thresholdRGB-" + intToString(actual_threshold_rgb);
+        string string_featuresUsed = "featuresUsed-" + intToString(actual_featuresUsed);
+        string string_signFeat = "signFeat-" + intToString(actual_signFeat);
+        
+        for(int test10 = 0; test10<nomiVideo.size(); test10++)
+        {
+            string nomeVideo;
+            nomeVideo = nomiVideo.at(test10);
+        
+            string pathRes = "./results/" + pipeline + "/" + nomeVideo + "/" + class_id + "/" + string_use63 + "_" + string_featuresUsed + "_" + string_signFeat + "_" + string_threshold + ".yml";
+            if(fileExists(pathRes.c_str()))
+            {
+                cv::FileStorage fs(pathRes, cv::FileStorage::READ);
+        
+                vector<bool> vr_punteggio16;
+                vector<bool> vr_featuresSignatureCandidates;
+                vector<bool> vr_signatureEnabled;
+                vector<bool> vr_grayEnabled;
+                vector<int> vr_matching_threshold;
+                vector<int> vr_exp_positives;
+                vector<int> vr_nFalsePositives;
+                vector<int> vr_nFalseNegatives;
+                
+                
+                
+                int errorNegatives = 0;
+                if(nomeVideo == "kitchen_small_1")
+                {
+                    if(class_id == "flashlight_2")
+                        errorNegatives =1;
+                    if(class_id == "flashlight_5")
+                        errorNegatives =3;
+                    if(class_id == "soda_can_1")
+                        errorNegatives =0;
+                    if(class_id == "soda_can_6")
+                        errorNegatives =1;
+                    if(class_id == "cap_1")
+                        errorNegatives =2;
+                }
+                if(nomeVideo == "desk_1")
+                {
+                    if(class_id == "soda_can_6")
+                        errorNegatives =2;
+                    if(class_id == "cap_4")
+                        errorNegatives =5;
+                }
+                if(nomeVideo == "desk_2")
+                {
+                    if(class_id == "flashlight_1")
+                        errorNegatives =6;
+                    if(class_id == "soda_can_4")
+                        errorNegatives =3;
+                }
+                if(nomeVideo == "desk_3")
+                {
+                    if(class_id == "flashlight_3")
+                        errorNegatives =15;
+                    if(class_id == "flashlight_5")
+                        errorNegatives =11;
+                }
+                if(nomeVideo == "meeting_small_1")
+                {
+                    if(class_id == "cap_1")
+                        errorNegatives =0;
+                    if(class_id == "cap_3")
+                        errorNegatives =3;
+                    if(class_id == "flashlight_2")
+                        errorNegatives =9;
+                    if(class_id == "flashlight_5")
+                        errorNegatives =9;
+                    if(class_id == "soda_can_1")
+                        errorNegatives =8;
+                    if(class_id == "soda_can_3")
+                        errorNegatives =0;
+                    if(class_id == "soda_can_5")
+                        errorNegatives =1;
+                }
+                if(nomeVideo == "table_1")
+                {
+                    if(class_id == "cap_1")
+                        errorNegatives =0;
+                    if(class_id == "cap_4")
+                        errorNegatives =5;
+                    if(class_id == "flashlight_3")
+                        errorNegatives =12;
+                    if(class_id == "soda_can_4")
+                        errorNegatives =1;
+                }
+                if(nomeVideo == "table_small_1")
+                {
+                    if(class_id == "soda_can_3")
+                        errorNegatives =0;
+                    if(class_id == "cap_1")
+                        errorNegatives =0;
+                }
+                if(nomeVideo == "table_small_2")
+                {
+                    if(class_id == "cap_4")
+                        errorNegatives =21;
+                    if(class_id == "soda_can_1")
+                        errorNegatives =0;
+                }
+                
+                cv::FileNode fn = fs["tests"];
+                for (cv::FileNodeIterator i = fn.begin(); i != fn.end(); ++i)
+                {
+                    vr_punteggio16.push_back(((int)(*i)["punteggio16"]));
+                    vr_featuresSignatureCandidates.push_back(((int)(*i)["featuresSignCand"]));
+                    vr_signatureEnabled.push_back(((int)(*i)["signatureEnabled"]));
+                    vr_grayEnabled.push_back(((int)(*i)["grayEnabled"]));
+                    vr_matching_threshold.push_back((*i)["matching"]);
+                    
+                    int matching = (*i)["matching"];
+                    bool found = false;
+                    for(int m = 0; m<indexMatching.size(); m++)
+                        if(indexMatching[m] == matching)
+                            found = true;
+                    if(found == false)
+                        indexMatching.push_back(matching);
+                    
+                    
+                    int correctExp = (*i)["Expected positives"];
+                    correctExp -= errorNegatives;
+                    if(correctExp < 0)
+                        correctExp = 0;
+                    int correctFN = (*i)["False Negatives"];
+                    correctFN -= errorNegatives;
+                    if(correctFN < 0)
+                        correctFN = 0;
+                    
+                    vr_exp_positives.push_back(correctExp);
+                    vr_nFalsePositives.push_back((*i)["False Positives"]);
+                    vr_nFalseNegatives.push_back(correctFN);
+                }
+                
+                fs.release();
+                
+                
+
+                for(int res = 0; res<vr_matching_threshold.size(); res++)
+                {
+                    
+                    string string_matching = "matching-" + intToString(vr_matching_threshold.at(res));
+                                        
+                    string parameters = string_matching + class_id;
+                    
+                    int actual_exp_positives = vr_exp_positives.at(res);
+                    int actual_fp = vr_nFalsePositives.at(res);
+                    int actual_fn = vr_nFalseNegatives.at(res);
+                    int actual_fpfn = actual_fp + actual_fn;
+                    
+                    map_expectedPositive[parameters] = map_expectedPositive[parameters] + actual_exp_positives;
+                    map_falsePositive[parameters] = map_falsePositive[parameters] + actual_fp;
+                    map_falseNegative[parameters] = map_falseNegative[parameters] + actual_fn;
+                    map_falsePosNeg[parameters] = map_falsePosNeg[parameters] + actual_fpfn;
+                    
+                }
+
+            }
+        }
+    }
+    cout<<endl;
+    
+    for(int cc = 0; cc<all_categories.size(); cc++)
+    {
+        pair<string,string> category = all_categories.at(cc);
+        string class_id = category.first + "_" + category.second;
+        
+        string dirVideo = "./precisionClassi/" + class_id + "/" + class_id + "_Precision_recall.yml";
+    
+        if(map_expectedPositive.size() != indexMatching.size()*all_categories.size())
+        {
+            cout<<"QUALCOSA NON VA!!!!!!!!!!!!!"<<endl;
+            //return false;
+        }
+        cv::FileStorage fs_best(dirVideo, cv::FileStorage::WRITE);
+        if(indexMatching[0] < indexMatching[1])
+            reverse(indexMatching.begin(),indexMatching.end());
+        
+        cout<<"match: ";
+        for(int ord = 0; ord<indexMatching.size(); ord++)
+            cout<<indexMatching[ord]<<"-";
+        cout<<endl;
+        
+        
+        for(int jk=0; jk<indexMatching.size(); jk++)
+        {
+            string constParameters = "matching-" + intToString(indexMatching[jk]) + class_id;
+            int ep = map_expectedPositive[constParameters];
+            int fp = map_falsePositive[constParameters];
+            int fn = map_falseNegative[constParameters];
+            int tp = ep - fn;
+            float precision;
+            float recall;
+            if((tp + fp) == 0)
+                precision = 1;
+            else
+                precision = (float)tp/((float)tp + (float)fp);
+            if((tp + fn) == 0)
+                recall = 1;
+            else
+                recall =  (float)tp/((float)tp + (float)fn);
+            
+            fs_best << "Matching "+intToString(indexMatching[jk]) << "[";
+                fs_best << "{";
+                    fs_best <<"Expected positives"<<ep;
+                    fs_best <<"False Positives"<<fp;
+                    fs_best <<"False Negatives"<<fn;
+                    fs_best <<"Precision"<<floatToString(precision);
+                    fs_best <<"Recall"<<floatToString(recall);
+                fs_best << "}";
+            fs_best << "]";
+            
+            
+            
+        }
+        
+        fs_best.release();
+    }
+        
+    
+    return true;
+    
+    
+}
+
 
  void pulisci_risultati(int nPipe, bool& actual_use63, int& actual_featuresUsed, int& actual_signFeat, bool& actual_punteggio16, bool& actual_featuresSignatureCandidates, bool& actual_grayEnabled, bool& actual_signatureEnabled, int& actual_threshold_rgb, int& actual_matching_threshold, string class_id, string nomeVideo)
  {

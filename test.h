@@ -40,11 +40,11 @@ public:
 
 	//v_threshold_rgb.push_back(45); //ORIGINAL
 
-	v_threshold_rgb.push_back(55); //trainato
-	v_threshold_rgb.push_back(60);//trainato
+	//v_threshold_rgb.push_back(55); //trainato
+	//v_threshold_rgb.push_back(60);//trainato
 	v_threshold_rgb.push_back(65);//trainato
-	v_threshold_rgb.push_back(70);//trainato
-	v_threshold_rgb.push_back(75);//trainato
+	//v_threshold_rgb.push_back(70);//trainato
+	//v_threshold_rgb.push_back(75);//trainato
 
 	
 //////parametri che influenzano solo il matching
@@ -52,23 +52,24 @@ public:
 	v_punteggio16.push_back(true);	
 	//v_punteggio16.push_back(false);   //ORIGINAL
 	
-	v_featuresSignatureCandidates.push_back(true);
+	//v_featuresSignatureCandidates.push_back(true);
 	v_featuresSignatureCandidates.push_back(false);  //ORIGINAL
 	
-	v_signatureEnabled.push_back(true);
+	//v_signatureEnabled.push_back(true);
 	v_signatureEnabled.push_back(false);  //ORIGINAL
 	
 	
 	//v_grayEnabled.push_back(true);
 	v_grayEnabled.push_back(false);  //ORIGINAL
 	
+	for(int hy = 100; hy>=50; hy-=2)
+	    v_matching_threshold.push_back(hy);
+	
+	
+	
+	
 	//v_matching_threshold.push_back(75);
-	//v_matching_threshold.push_back(75);
-	//v_matching_threshold.push_back(76);
-	//v_matching_threshold.push_back(77);
-	//v_matching_threshold.push_back(78);
-	//v_matching_threshold.push_back(79);
-	v_matching_threshold.push_back(80);  //ORIGINAL
+	//v_matching_threshold.push_back(80);  //ORIGINAL
 	//v_matching_threshold.push_back(85);
 	
     }
@@ -106,8 +107,8 @@ public:
     {
 	//parametri dei template
 	//
-	actual_use63 = false; //default true
-	actual_featuresUsed = 126; //default 63
+	actual_use63 = true; //default true
+	actual_featuresUsed = 63;
 	
 	actual_signFeat = 150; //default 30
 	
@@ -121,7 +122,7 @@ public:
 	
 	actual_grayEnabled = false;  //default true
 	
-	actual_signatureEnabled = true; //default true
+	actual_signatureEnabled = false; //default true
 	
 	actual_matching_threshold = 80; //default 80
     }
@@ -172,7 +173,7 @@ public:
 	//all_categories.push_back(make_pair("flashlight","1"));
 	all_categories.push_back(make_pair("flashlight","2"));
 	//all_categories.push_back(make_pair("flashlight","3"));
-	//all_categories.push_back(make_pair("flashlight","5"));
+	all_categories.push_back(make_pair("flashlight","5"));
 	//all_categories.push_back(make_pair("soda_can","1"));
 	//all_categories.push_back(make_pair("soda_can","3"));
 	//all_categories.push_back(make_pair("soda_can","4"));
@@ -212,8 +213,8 @@ public:
 	kitchen_small_1_categories.push_back(make_pair("flashlight","5"));
 	kitchen_small_1_categories.push_back(make_pair("soda_can","1"));
 	kitchen_small_1_categories.push_back(make_pair("soda_can","6"));
-	kitchen_small_1_categories.push_back(make_pair("coffee_mug","5"));
-	kitchen_small_1_categories.push_back(make_pair("cereal_box","2"));
+	//kitchen_small_1_categories.push_back(make_pair("coffee_mug","5"));
+	//kitchen_small_1_categories.push_back(make_pair("cereal_box","2"));
 	kitchen_small_1_categories.push_back(make_pair("cap","1"));
 	
 	cartelleVideo.push_back("video/rgbd-scenes/desk/desk_1/" + converted);
@@ -221,7 +222,7 @@ public:
 	nomiVideo.push_back("desk_1");
 	
 	desk_1_categories.push_back(make_pair("soda_can","6"));
-	desk_1_categories.push_back(make_pair("coffee_mug","5"));
+	//desk_1_categories.push_back(make_pair("coffee_mug","5"));
 	desk_1_categories.push_back(make_pair("cap","4"));
 	
 	cartelleVideo.push_back("video/rgbd-scenes/desk/desk_2/" + converted);
@@ -239,7 +240,7 @@ public:
 	//desk_3_categories.push_back(make_pair("bowl","4"));
 	desk_3_categories.push_back(make_pair("flashlight","3"));
 	desk_3_categories.push_back(make_pair("flashlight","5"));
-	desk_3_categories.push_back(make_pair("cereal_box","1"));
+	//desk_3_categories.push_back(make_pair("cereal_box","1"));
 	
 	cartelleVideo.push_back("video/rgbd-scenes/meeting_small/meeting_small_1/" + converted);
 	filesGroundTruth.push_back("/media/TeraDati/HD Manu Clarabella/dataset rgbd/video/rgbd-scenes/meeting_small/test_meeting.hdf5");
@@ -254,10 +255,10 @@ public:
 	meeting_small_1_categories.push_back(make_pair("soda_can","1"));
 	meeting_small_1_categories.push_back(make_pair("soda_can","3"));
 	meeting_small_1_categories.push_back(make_pair("soda_can","5"));
-	meeting_small_1_categories.push_back(make_pair("coffee_mug","5"));
-	meeting_small_1_categories.push_back(make_pair("coffee_mug","6"));
-	meeting_small_1_categories.push_back(make_pair("cereal_box","1"));
-	meeting_small_1_categories.push_back(make_pair("cereal_box","2"));
+	//meeting_small_1_categories.push_back(make_pair("coffee_mug","5"));
+	//meeting_small_1_categories.push_back(make_pair("coffee_mug","6"));
+	//meeting_small_1_categories.push_back(make_pair("cereal_box","1"));
+	//meeting_small_1_categories.push_back(make_pair("cereal_box","2"));
 	    
 	cartelleVideo.push_back("video/rgbd-scenes/table/table_1/" + converted);
 	filesGroundTruth.push_back("/media/TeraDati/HD Manu Clarabella/dataset rgbd/video/rgbd-scenes/table/test_table.hdf5");
@@ -266,9 +267,9 @@ public:
 	//table_1_categories.push_back(make_pair("bowl","2"));
 	table_1_categories.push_back(make_pair("cap","1"));
 	table_1_categories.push_back(make_pair("cap","4"));
-	table_1_categories.push_back(make_pair("cereal_box","4"));
-	table_1_categories.push_back(make_pair("coffee_mug","1"));
-	table_1_categories.push_back(make_pair("coffee_mug","4"));
+	//table_1_categories.push_back(make_pair("cereal_box","4"));
+	//table_1_categories.push_back(make_pair("coffee_mug","1"));
+	//table_1_categories.push_back(make_pair("coffee_mug","4"));
 	table_1_categories.push_back(make_pair("flashlight","3"));
 	table_1_categories.push_back(make_pair("soda_can","4"));
 	
@@ -277,8 +278,8 @@ public:
 	nomiVideo.push_back("table_small_1");
 	
 	//table_small_1_categories.push_back(make_pair("bowl","4"));
-	table_small_1_categories.push_back(make_pair("cereal_box","1"));
-	table_small_1_categories.push_back(make_pair("coffee_mug","1"));
+	//table_small_1_categories.push_back(make_pair("cereal_box","1"));
+	//table_small_1_categories.push_back(make_pair("coffee_mug","1"));
 	table_small_1_categories.push_back(make_pair("soda_can","3"));
 	table_small_1_categories.push_back(make_pair("cap","1"));
 
@@ -287,7 +288,7 @@ public:
 	nomiVideo.push_back("table_small_2");
 	
 	table_small_2_categories.push_back(make_pair("cap","4"));
-	table_small_2_categories.push_back(make_pair("cereal_box","4"));
+	//table_small_2_categories.push_back(make_pair("cereal_box","4"));
 	table_small_2_categories.push_back(make_pair("soda_can","1"));
 	
 	//aggiungo tutte le singole categorie in un unico vettore
@@ -311,8 +312,19 @@ public:
 	sort(all_categories.begin(), all_categories.end());
 	all_categories.erase( unique( all_categories.begin(), all_categories.end() ), all_categories.end() );
 	
+	//PER ADDESTRARE SOLO I VIDEO VOLUTI//
+	/*cartelleVideo.clear();
+	filesGroundTruth.clear();
+	nomiVideo.clear();
+	cartelleVideo.push_back("video/rgbd-scenes/desk/desk_1/" + converted);
+	filesGroundTruth.push_back("/media/TeraDati/HD Manu Clarabella/dataset rgbd/video/rgbd-scenes/desk/test_desk_1.hdf5");
+	nomiVideo.push_back("desk_1");
+	//cartelleVideo.push_back("video/rgbd-scenes/desk/desk_2/" + converted);
+	//filesGroundTruth.push_back("/media/TeraDati/HD Manu Clarabella/dataset rgbd/video/rgbd-scenes/desk/test_desk_2.hdf5");
+	//nomiVideo.push_back("desk_2");
+	*/
 	//PER ADDESTRARE SOLO LE CATEGORIE VOLUTE//
-/*	all_categories.clear();
+	/*all_categories.clear();
 	all_categories.push_back(make_pair("flashlight","1"));
 	all_categories.push_back(make_pair("flashlight","2"));
 	all_categories.push_back(make_pair("flashlight","3"));
@@ -324,9 +336,10 @@ public:
 	all_categories.push_back(make_pair("soda_can","6"));
 	all_categories.push_back(make_pair("cap","1"));
 	all_categories.push_back(make_pair("cap","3"));
-	all_categories.push_back(make_pair("cap","4"));
+	all_categories.push_back(make_pair("cap","4"));*/
 	/*
 	all_categories.clear();
+	all_categories.push_back(make_pair("flashlight","2"));
 	all_categories.push_back(make_pair("flashlight","5"));*/
 	//////////////////////////////////////////
 	
@@ -486,3 +499,7 @@ void analyzeResults_video(int nP, vector<string>& nomiVideo, vector<int> v_thres
 void analyzeResults_global(int nP, vector<string>& nomiVideo, vector<int> v_threshold_rgb, vector<bool> v_use63, vector<int> v_featuresUsed, vector<int> v_signFeat, vector<pair<string,string> > all_categories);
 void analyzeResults_pipelines(int nPipe);
 void pulisci_risultati(int nP, bool& actual_use63, int& actual_featuresUsed, int& actual_signFeat, bool& actual_punteggio16, bool& actual_featuresSignatureCandidates, bool& actual_grayEnabled, bool& actual_signatureEnabled, int& actual_threshold_rgb, int& actual_matching_threshold, string class_id, string nomeVideo);
+bool checkPrecisionRecall(int nPipe, vector<string>& nomiVideo, int actual_threshold_rgb, bool actual_use63, int actual_featuresUsed, int actual_signFeat, vector<pair<string,string> > all_categories, bool analyzeCurrentResults);
+bool checkSinglePrecisionRecall(int nPipe, vector<string>& nomiVideo, int actual_threshold_rgb, bool actual_use63, int actual_featuresUsed, int actual_signFeat, vector<pair<string,string> > all_categories, bool analyzeCurrentResults);
+void creaGraficiGoogle();
+void creaTuttiGraficiGoogle(vector<pair<string,string> > all_categories);

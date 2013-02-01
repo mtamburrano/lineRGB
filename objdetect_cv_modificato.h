@@ -363,6 +363,7 @@ struct CV_EXPORTS Match
   Match(int x, int y, float sim_combined, float similarity, float similarity_rgb, const std::string& class_id, int template_id, short scartato)
     : x(x), y(y), sim_combined(sim_combined), similarity(similarity), similarity_rgb(similarity_rgb), class_id(class_id), template_id(template_id), scartato(scartato)
   {
+      suppressed = 0;
   }
 
   /*/// Sort matches with high similarity to the front
@@ -390,6 +391,7 @@ struct CV_EXPORTS Match
     return x == rhs.x && y == rhs.y && sim_combined == rhs.sim_combined && similarity_rgb == rhs.similarity_rgb && similarity == rhs.similarity && class_id == rhs.class_id;
   }
   
+  
   /*bool sort0(const Match& m1, const Match& m2) const
   {
       float sim1 = (m1.similarity + m1.similarity_rgb)/2
@@ -412,6 +414,7 @@ struct CV_EXPORTS Match
   short scartato;
   int width;
   int height;
+  int suppressed;
 };
 
 /**

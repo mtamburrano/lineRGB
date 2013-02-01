@@ -79,8 +79,10 @@ static int scoreUsed = 0;
 static int signFeat = 30;
 
 static int numPipelines = 8;
-static bool nonMaxSuppressionEnabled = true;
+static bool nonMaxSuppressionEnabled = false;
+static bool suppressed_threshold_enabled = false;
 
+#define WHITE false
 #define WHITE false
 #define BLACK true
 
@@ -115,6 +117,9 @@ void setSingleton()
 	cout<<"grayEnabled: "<< grayEnabled<<endl;
 	cout<<"punteggio16: "<< punteggio16<<endl;
 	cout<<"signatureEnabled: "<<signatureEnabled <<endl;
+	
+	cout<<"Matching: "<<ptr_singleton->s_matching_threshold<<endl;
+	
 	cout<<"DEBUGGING: "<<DEBUGGING <<endl;
 	cout<<"numPipelines: "<<numPipelines <<endl;
     }
@@ -2714,6 +2719,7 @@ const unsigned char* accessLinearMemoryRGB(const std::vector<Mat>& linear_memori
 void similarity(const std::vector<Mat>& linear_memories, const Template& templ,
                 Mat& dst, Size size, int T)
 {
+    
   // 63 features or less is a special case because the max similarity per-feature is 4.
   // 255/4 = 63, so up to that many we can add up similarities in 8 bits without worrying
   // about overflow. Therefore here we use _mm_add_epi8 as the workhorse, whereas a more
@@ -2750,6 +2756,7 @@ void similarity(const std::vector<Mat>& linear_memories, const Template& templ,
   volatile bool haveSSE3 = checkHardwareSupport(CV_CPU_SSE3);
 #endif
 #endif
+
 
 //haveSSE2 = false;
 //haveSSE3 = false;
@@ -2817,9 +2824,6 @@ void similarity(const std::vector<Mat>& linear_memories, const Template& templ,
 void similarityRGB(const std::vector<Mat>& linear_memories, const std::vector<Mat>& linear_memories_rgb, const Template& templ,
                 Mat& dst, Mat& dst_rgb, Size size, int T)
 {
-    
-
-
 
   //if(DEBUGGING) std::cout<<"similarity debug: linear_memories.size(): "<<linear_memories.size()<<" righe di linear_memories: "<<linear_memories[0].rows<<" colonne: "<<linear_memories[0].cols<<" Size.width: "<<size.width<<" Size.height: "<<size.height<<" T: "<<T<<" template.width: "<<templ.width<<" template.height: "<<templ.height<<"pyramid_level: "<<templ.pyramid_level<<std::endl;
 	
@@ -2883,8 +2887,7 @@ void similarityRGB(const std::vector<Mat>& linear_memories, const std::vector<Ma
 //haveSSE3 = false;
   // Compute the similarity measure for this template by accumulating the contribution of
   // each feature
-Timer extract_timer;
-	extract_timer.start();
+
 
   int total_features_size;
   std::vector<cv::my_linemod::Feature> total_features;
@@ -3086,8 +3089,6 @@ else //if we are working with more than 63 features !!!!!!!!!!!!!!!!!!!!AGGIUNGE
     
   }
 
-  extract_timer.stop();
-
   
  
 }
@@ -3196,6 +3197,7 @@ void similarityLocalRGB(const std::vector<Mat>& linear_memories, const std::vect
 {
    
     
+  
   // Similar to whole-image similarity() above. This version takes a position 'center'
   // and computes the energy in the 16x16 patch centered on it.
   
@@ -3429,6 +3431,7 @@ haveSSE2 = false;
 
   //if(DEBUGGING) std::cout<<"dst16x16:"<<std::endl<<dst<<std::endl;
     //  if(DEBUGGING) std::cout<<"feature in local similarity: "<<countFeatureLocal<<std::endl;
+
 }
 
 /**
@@ -3618,6 +3621,13 @@ struct NonMaxSuppressionPredicate
   Match mHigher;
 };
 
+struct SuppressionThresholdPredicate
+{
+  SuppressionThresholdPredicate(){}
+  bool operator() (const Match& m) { return m.suppressed < 1; }
+};
+
+
 void Detector::match(const std::vector<Mat>& sources, float threshold, std::vector<std::vector<Match> >& matches,
                      const std::vector<std::string>& class_ids, OutputArrayOfArrays quantized_images,
                      const std::vector<Mat>& masks) const
@@ -3737,35 +3747,34 @@ void Detector::match(const std::vector<Mat>& sources, float threshold, std::vect
   
 for(int nm = 0; nm<numPipelines; nm++)
 {
-    std::sort(matches[nm].begin(), matches[nm].end());
+    std::vector<vector<Match> >::iterator match_it = matches.begin() + nm;
+    std::sort((*match_it).begin(), (*match_it).end());
 
-    std::vector<Match>::iterator new_end = std::unique(matches[nm].begin(), matches[nm].end());
-    matches[nm].erase(new_end, matches[nm].end());
+    std::vector<Match>::iterator new_end = std::unique((*match_it).begin(), (*match_it).end());
+    (*match_it).erase(new_end, (*match_it).end());
 
-
-    
   ///////////////DISEGNO SU MAGNITUDE/////////////////
-    if(signatureEnabled == true && matches[nm].size() > 0 )
+    if(signatureEnabled == true && (*match_it).size() > 0 )
     {
 
       for (int m = 0; m < modalities.size(); ++m)
       {
 	int nonScartati = 0;
 	
-	for(std::vector<Match>::iterator scar = matches[nm].begin(); scar!=matches[nm].end(); )
+	for(std::vector<Match>::iterator scar = (*match_it).begin(); scar!=(*match_it).end(); )
 	{
-	    Match& tempMatch = *scar;
+	    //Match& tempMatch = *scar;
 	    
-	    const std::vector<cv::my_linemod::Template>& templates = getTemplates(tempMatch.class_id, tempMatch.template_id);
+	    const std::vector<cv::my_linemod::Template>& templates = getTemplates((*scar).class_id, (*scar).template_id);
 	    
-	    cv::Point offset = cv::Point(tempMatch.x, tempMatch.y);
+	    cv::Point offset = cv::Point((*scar).x, (*scar).y);
 	    
 	    //imshow("magnitudeStrong+contour",cgp->magnitudeStrong);
 
-	    cv::Point offsetEnd = cv::Point(tempMatch.x+templates[0].width, tempMatch.y+templates[0].height);
+	    cv::Point offsetEnd = cv::Point((*scar).x+templates[0].width, (*scar).y+templates[0].height);
 	    //int T = getT(0);
 	    
-	    Mat magnitudeMatched = cgp->magnitudeStrong(Rect(tempMatch.x, tempMatch.y, templates[0].width, templates[0].height));
+	    Mat magnitudeMatched = cgp->magnitudeStrong(Rect((*scar).x, (*scar).y, templates[0].width, templates[0].height));
 
 	    Scalar colorM = Scalar( 255, 0, 0 );
 	    vector<vector<Point> > contours;
@@ -3804,14 +3813,14 @@ for(int nm = 0; nm<numPipelines; nm++)
 	    if(diffFeatures > 0)
 		impact = diffFeatures/thresh_allow;
 	    
-	    if(DEBUGGING) std::cout<<" similarity combined prima: = "<<tempMatch.sim_combined<<std::endl;
-	    float similarityAdjusted = tempMatch.sim_combined - (float)impact;
+	    if(DEBUGGING) std::cout<<" similarity combined prima: = "<<(*scar).sim_combined<<std::endl;
+	    float similarityAdjusted = (*scar).sim_combined - (float)impact;
 	    if(DEBUGGING) std::cout<<" similarity combined dopo: = "<<similarityAdjusted<<std::endl;
 	    if(DEBUGGING) std::cout<<" IMPACT = "<<impact<<std::endl;
 	    if(similarityAdjusted<threshold)
 	    {
 		
-		tempMatch.scartato = 1;
+		(*scar).scartato = 1;
 		scar++;
 	    }
 	    else
@@ -3819,32 +3828,49 @@ for(int nm = 0; nm<numPipelines; nm++)
 		//ho trovato il primo non scartato, appplico il non max-suppression su questo
 		if(nonMaxSuppressionEnabled == true)
 		{
+
 		    //cancello i match scartati che vanno dall'ultimo non scartato all'ultimo degli scartati
-		    std::vector<Match>::iterator new_begin = matches[nm].begin() + nonScartati;
-		    std::vector<Match>::iterator new_end_scartato = std::remove_if(new_begin, matches[nm].end(), ScartatoPredicate());
-		    matches[nm].erase(new_end_scartato, matches[nm].end());
-		    nonScartati++;
-		    //riparto dal primo non controllato(quelli prima a questo punto sono tutti non scartati)
-		    scar = matches[nm].begin() + nonScartati;
+		    std::vector<Match>::iterator new_begin = (*match_it).begin() + nonScartati;
+		    std::vector<Match>::iterator new_end_scartato = std::remove_if( new_begin, (*match_it).end(), ScartatoPredicate());
+		    (*match_it).erase(new_end_scartato, (*match_it).end());
 		    
-		    std::vector<Match>::iterator new_end_sup = std::remove_if(scar, matches[nm].end(), NonMaxSuppressionPredicate(tempMatch));
-		    matches[nm].erase(new_end_sup, matches[nm].end());
+		    //riparto dal primo non controllato(quelli prima a questo punto sono tutti non scartati)
+		    scar = (*match_it).begin() + nonScartati;
+		    nonScartati++;
+
+		    
+		    
+		    int tmpSize = (*match_it).size();
+		    std::vector<Match>::iterator new_end_sup = std::remove_if(scar+1, (*match_it).end(), NonMaxSuppressionPredicate((*scar)));
+		    (*match_it).erase(new_end_sup, (*match_it).end());
+		    tmpSize = tmpSize - (*match_it).size();
+		    (*scar).suppressed = tmpSize;
+		    scar++;
 
 		}
 		else
 		    scar++;
 	    }
 
-	    if(DEBUGGING) std::cout<<" scartato: "<<tempMatch.scartato<<std::endl;
+	    if(DEBUGGING) std::cout<<" scartato: "<<(*scar).scartato<<std::endl;
 	}
 	
-	//do un'ultima passata di eliminazione degli scartati per a) se suppression è abilitata, eliminare gli scartati in fondo il vettore b) altrimenti perchè non li ho mai eliminati
-	std::vector<Match>::iterator new_begin = matches[nm].begin();
-	if(nonMaxSuppressionEnabled == true)
-	    new_begin = matches[nm].begin() + nonScartati;
 	
-	std::vector<Match>::iterator new_end_scartato = std::remove_if(new_begin, matches[nm].end(), ScartatoPredicate());
-	matches[nm].erase(new_end_scartato, matches[nm].end());
+	//do un'ultima passata di eliminazione degli scartati per a) se suppression è abilitata, eliminare gli scartati in fondo il vettore b) altrimenti perchè non li ho mai eliminati
+	std::vector<Match>::iterator new_begin = (*match_it).begin();
+	if(nonMaxSuppressionEnabled == true)
+	    new_begin = (*match_it).begin() + nonScartati;
+	
+	std::vector<Match>::iterator new_end_scartato = std::remove_if(new_begin, (*match_it).end(), ScartatoPredicate());
+	(*match_it).erase(new_end_scartato, (*match_it).end());
+	
+	
+	if(nonMaxSuppressionEnabled == true && suppressed_threshold_enabled == true)
+	{
+	    std::vector<Match>::iterator new_end_scartato = std::remove_if((*match_it).begin(), (*match_it).end(), SuppressionThresholdPredicate());
+	    (*match_it).erase(new_end_scartato, (*match_it).end());
+	}
+	
 	
       }
     }
@@ -3862,21 +3888,22 @@ for(int nm = 0; nm<numPipelines; nm++)
   {
       for(int nm = 0; nm<numPipelines; nm++)
       {
-
-	    std::vector<Match>::iterator new_end_scartato = std::remove_if(matches[nm].begin(), matches[nm].end(), ScartatoPredicate());
-	    matches[nm].erase(new_end_scartato, matches[nm].end());
-
-	    if(nonMaxSuppressionEnabled == true)
+	    std::vector<vector<Match> >::iterator match_it = matches.begin() + nm;
+	    for(std::vector<Match>::iterator it = (*match_it).begin(); it!=(*match_it).end(); it++)
 	    {
-
-		for(std::vector<Match>::iterator it = matches[nm].begin(); it!=matches[nm].end(); it++)
-		{
-		    Match mTemp = *it;
-		    std::vector<Match>::iterator new_end_sup = std::remove_if(it+1, matches[nm].end(), NonMaxSuppressionPredicate(mTemp));
-		    matches[nm].erase(new_end_sup, matches[nm].end());
-		}
-
+		int tmpSize = (*match_it).size();
+		std::vector<Match>::iterator new_end_sup = std::remove_if(it+1, (*match_it).end(), NonMaxSuppressionPredicate((*it)));
+		(*match_it).erase(new_end_sup, (*match_it).end());
+		tmpSize = tmpSize - (*match_it).size();
+		(*it).suppressed = tmpSize;
 	    }
+	    
+	    if(suppressed_threshold_enabled == true)
+	    {
+		std::vector<Match>::iterator new_end_scartato = std::remove_if((*match_it).begin(), (*match_it).end(), SuppressionThresholdPredicate());
+		(*match_it).erase(new_end_scartato, (*match_it).end());
+	    }
+
 	    
       }
   }
@@ -3932,6 +3959,8 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
     std::vector<Match> tmpVec; 
     matches.push_back(tmpVec);
   }
+  Timer extract_timer;
+    extract_timer.start();
   // For each template...
   for (size_t template_id = 0; template_id < template_pyramids.size(); ++template_id)
   {
@@ -4006,15 +4035,18 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
         int raw_score = row[c];
         int raw_score_rgb = row_rgb[c];//*modalities.size();
         
+	int raw_score_combined = (raw_score + raw_score_rgb)/2;
+	
 	//if(DEBUGGING) std::cout<<"template_id: "<<template_id<<"raw_score: "<<raw_score<<"raw_score_rgb: "<<raw_score_rgb<<std::endl;
 	
         //raw_score = raw_score +raw_score_rgb;
         if (raw_score > raw_threshold)
+        //if (raw_score_combined > raw_threshold)
         {
           int offset = lowest_T / 2 + (lowest_T % 2 - 1);
           int x = c * lowest_T + offset;
           int y = r * lowest_T + offset;
-          float score = (raw_score * 100.f) / (4 * num_features) + 0.5f;
+          float score = (raw_score_combined * 100.f) / (4 * num_features) + 0.5f;
 	  float score_rgb;
 	  
 	  if(punteggio16 == true)
@@ -4193,6 +4225,7 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
 		}
    
 		if (score_combined > best_score_combined)
+		//if(score > best_score)
 		{
 		    best_score_combined = score_combined;
 		    best_score = score;
@@ -4228,11 +4261,15 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
 		    new_end = std::remove_if(actualCandidates.begin(), actualCandidates.end(),
 								    MatchPredicate(threshold));
 		    actualCandidates.erase(new_end, actualCandidates.end());
+/*QUESTO BREAK--->*///break;
 		    
-		    new_end_rgb = std::remove_if(actualCandidates.begin(), actualCandidates.end(),
+//DECOMMENTARE SE RIABILITARE SCORE RGB	E TOGLI IL BREAK!!
+	    new_end_rgb = std::remove_if(actualCandidates.begin(), actualCandidates.end(),
 								    MatchPredicateRGB(threshold));
 		    actualCandidates.erase(new_end_rgb, actualCandidates.end());
 		    break;
+
+
 		/*
 		case 0:
 		    new_end = std::remove_if(actualCandidates.begin(), actualCandidates.end(),
@@ -4327,6 +4364,8 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
     for(int nm = 0; nm<numPipelines; nm++)
 	matches[nm].insert(matches[nm].end(), arrayCandidates[nm].begin(), arrayCandidates[nm].end());
   }
+  extract_timer.stop();
+  //printf("matchclass: %.2fs\n", extract_timer.time());
 }
 
 int Detector::changeTemplate(const std::vector<Mat>& sources, const std::string& class_id,

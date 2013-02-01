@@ -10,10 +10,13 @@ using namespace std;
 using namespace cv;
 
 static bool DEBUGGING = false;
-static bool TESTING = true;
+static bool TESTING = false;
 static int numPipelines = 1;
 static int curMatch = 0;
 static bool checkMinMaxBB = false;
+
+static bool multiClass = true;
+
 
 // Adapted from cv_timer in cv_utilities
 class Timer
@@ -54,7 +57,7 @@ cv::Ptr<cv::my_linemod::Detector> readLinemod(const std::string& filename);
 void writeLinemod(const cv::Ptr<cv::my_linemod::Detector>& detector, const std::string& filename);
 
 void drawResponse(const std::vector<cv::my_linemod::Template>& templates, 
-                  int num_modalities, cv::Mat& dst, cv::Point offset, int T, short scartato, string class_id, VideoFrame vf);
+                  int num_modalities, cv::Mat& dst, cv::Point offset, int T, short scartato, int suppressed, string class_id, VideoFrame vf);
 
 void checkAndWrite_bb_groundTruth(string class_id, Rect& bb, string immagineTemplate);
 
@@ -76,11 +79,22 @@ int main(int argc, char * argv[])
     bool puliscirisultati = false;
     bool converted = false;
     bool analyzePipe = false;
+    bool analyzePrecisionRecall = false;
+    bool analyzeSinglePrecisionRecall = false;
+    bool creaTuttiGrafici = false;
     
     int num_modalities = 1;
     
-    string filename;
-    string templateMapName;
+    string filename = "";
+    string templateMapName = "";
+    string multiClassIds = "";
+
+    Size S = Size((int) 640, (int) 480);
+    VideoWriter outputVideo;                                        // Open the output
+    outputVideo.open("video.avi", CV_FOURCC('M','J','P','G'), 7, S, true);
+
+    
+
 
     for (int h = 1; h <= (argc - 1); h++) 
     {
@@ -149,11 +163,32 @@ int main(int argc, char * argv[])
           converted = true;
           printf("CONVERTED\n");
        }
+       if (strcmp("-analyzePrecisionRecall", argv[h]) == 0) 
+       {   
+          analyzePrecisionRecall = true;
+          printf("ANALYZING PRECISION RECALL\n");
+       }
+       if (strcmp("-analyzeSinglePrecisionRecall", argv[h]) == 0) 
+       {   
+          analyzeSinglePrecisionRecall = true;
+          printf("ANALYZING SINGLE PRECISION RECALL\n");
+       }
        if (strcmp("-debug", argv[h]) == 0) 
        {   
           DEBUGGING = true;
 	  TESTING = false;
           printf("debugging\n");
+       }
+       if (strcmp("-grafici", argv[h]) == 0) 
+       {   
+          printf("GRAFICI GOOGLE GO\n");
+	  creaGraficiGoogle();
+	  return 0;
+       }
+       if (strcmp("-tuttiGrafici", argv[h]) == 0) 
+       {   
+          printf("TUTTI GRAFICI GOOGLE GO\n");
+	  creaTuttiGrafici = true;
        }
        
        
@@ -286,16 +321,26 @@ int main(int argc, char * argv[])
 	    ptr_singleton->s_DEBUGGING = DEBUGGING;
 	    ptr_singleton->s_numPipelines = numPipelines;
 	    
+	    
+	    cv::Ptr<cv::my_linemod::Detector> detector;
+	    map<string, string> templateMap;
+	    if(multiClass == true)
+		detector = my_linemod::getDefaultLINE();
+	    Timer train_timer;
 	    for(int w = 0; w<all_categories.size(); w++)
 	    {
-		Timer train_timer;
+		
 		train_timer.start();
-		cv::Ptr<cv::my_linemod::Detector> detector;
-		detector = my_linemod::getDefaultLINE();
+		
+		if(multiClass == false)
+		{
+		    detector = my_linemod::getDefaultLINE();
+		    templateMap.clear();
+		}
 		
 		vector<string> listFiles;
 		pair<string,string> category = all_categories.at(w);
-		map<string, string> templateMap;
+		
 		
 		//ottengo tutti i nomi delle maschere nella cartella oggetto
 		string cartellaOggetto = category.first + "/" + category.first + "_" + category.second + "/";
@@ -318,13 +363,29 @@ int main(int argc, char * argv[])
 		
 		if(trainselected == false)
 		{
-		    filename = "./templates/" + class_id + "/" + string_use63 + "_" + string_featuresUsed + "_" + string_signFeat + "_" + string_threshold + ".yml";
-		    templateMapName = "./templates/" + class_id + "/" + "templatesMap_" + string_use63 + "_" + string_featuresUsed + "_" + string_signFeat + "_" + string_threshold + ".yml";
+		    if(multiClass == false)
+		    {
+			filename = "./templates/" + class_id + "/" + string_use63 + "_" + string_featuresUsed + "_" + string_signFeat + "_" + string_threshold + ".yml";
+			templateMapName = "./templates/" + class_id + "/" + "templatesMap_" + string_use63 + "_" + string_featuresUsed + "_" + string_signFeat + "_" + string_threshold + ".yml";
+		    }
+		    else //multiclass == true
+		    {
+			filename = "./templates/multiClass/" + string_use63 + "_" + string_featuresUsed + "_" + string_signFeat + "_" + string_threshold + ".yml";
+			templateMapName = "./templates/multiClass/templatesMap_" + string_use63 + "_" + string_featuresUsed + "_" + string_signFeat + "_" + string_threshold + ".yml";
+		    }
 		}
-		else
+		else 
 		{
-		    filename = "./selected/" + class_id + "_" + string_use63 + "_" + string_featuresUsed + "_" + string_signFeat + "_" + string_threshold + ".yml";
-		    templateMapName = "./selected/" + class_id + "_" + "templatesMap_" + string_use63 + "_" + string_featuresUsed + "_" + string_signFeat + "_" + string_threshold + ".yml";
+		    if(multiClass == false)
+		    {
+			filename = "./selected/" + class_id + "_" + string_use63 + "_" + string_featuresUsed + "_" + string_signFeat + "_" + string_threshold + ".yml";
+			templateMapName = "./selected/" + class_id + "_" + "templatesMap_" + string_use63 + "_" + string_featuresUsed + "_" + string_signFeat + "_" + string_threshold + ".yml";
+		    }
+		    else //multiclass == true
+		    {
+			filename = "./selected/multiClass_" + string_use63 + "_" + string_featuresUsed + "_" + string_signFeat + "_" + string_threshold + ".yml";
+			templateMapName = "./selected/multiClass_templatesMap_" + string_use63 + "_" + string_featuresUsed + "_" + string_signFeat + "_" + string_threshold + ".yml";
+		    }
 		}
 		
 		if(only1template == true)
@@ -416,7 +477,12 @@ int main(int argc, char * argv[])
 				    
 				    //memorizza scala nel class_id
 				    //int template_id = detector->addTemplate(sourcesTemplate, class_id + "_scale_" + intToString(iter), maskDst, &bb);
+				    Timer single_train_timer;
+				    single_train_timer.start();
 				    int template_id = detector->addTemplate(sourcesTemplate, class_id, maskFinal, &bb);
+				    single_train_timer.stop();
+				    printf("Train single: %.2fs\n", single_train_timer.time());
+				    
 				    
 				    if(checkMinMaxBB == true)
 					checkAndWrite_bb_groundTruth(class_id, bb, immagineTemplate);
@@ -447,7 +513,7 @@ int main(int argc, char * argv[])
 					if(DEBUGGING)imshow("color_rotated_featured"+intToString(iterRot), singleSourceFinal);
 					
 					//imwrite("./provaTemplate_can_1.png", singleSourceDst);
-					waitKey(0);
+					//waitKey(0);
 				    }
 				    
 				    printf("\n.....templating...");
@@ -473,17 +539,32 @@ int main(int argc, char * argv[])
 			}
 		    }
 		}
-		    	
+		if(multiClass == false)
+		{    	
+		    writeLinemod(detector, filename);
+		    writeTemplateMap(templateMap, templateMapName);
+		    cout<<endl<<filename<<" salvato"<<endl;
+		    cout<<endl<<templateMapName<<" salvato"<<endl;
+		    train_timer.stop();
+		    cout<<"Train time: "<<train_timer.time()<<endl;
+		    
+		    if(trainselected == true)
+			return 0;
+		}
+	    }
+	    
+	    if(multiClass == true)
+	    {    	
 		writeLinemod(detector, filename);
 		writeTemplateMap(templateMap, templateMapName);
 		cout<<endl<<filename<<" salvato"<<endl;
 		cout<<endl<<templateMapName<<" salvato"<<endl;
 		train_timer.stop();
 		cout<<"Train time: "<<train_timer.time()<<endl;
+		
 		if(trainselected == true)
 		    return 0;
 	    }
-		    
 	}		    
 	}
 	}
@@ -526,6 +607,21 @@ int main(int argc, char * argv[])
 	if(resetresults == true)
 	{
 	    deleteResults(numPipelines, v_threshold_rgb, v_use63, v_featuresUsed, v_signFeat, nomiVideo, all_categories);
+	    return 0;
+	}
+	if(analyzePrecisionRecall == true)
+	{
+	    checkPrecisionRecall(/*nm*/0, nomiVideo, actual_threshold_rgb, actual_use63, actual_featuresUsed, actual_signFeat, all_categories, true);
+	    return 0;
+	}
+	if(analyzeSinglePrecisionRecall == true)
+	{
+	    checkSinglePrecisionRecall(/*nm*/0, nomiVideo, actual_threshold_rgb, actual_use63, actual_featuresUsed, actual_signFeat, all_categories, true);
+	    return 0;
+	}
+	if(creaTuttiGrafici == true)
+	{
+	    creaTuttiGraficiGoogle(all_categories);
 	    return 0;
 	}
     }
@@ -626,7 +722,14 @@ int main(int argc, char * argv[])
 		return 0;
 	    }
 	    int framesNumber = tv.nFrames;
-	    
+	    cout<<"NUMERO GT FRAMES:"<<tv.nFrames<<endl;
+	    for(int gh = 0; gh<tv.nFrames; gh++)
+	    {
+		cout<<"item frame "<<gh<<": "<<tv.frames.at(gh).nItem<<endl;
+		//DA CONTROLLARE GROUND TRUTH ITEMS
+		//for(int gz = 0; gz<= tv.frames.at(gh).nItem; gz++)
+		  //  cout<<"item"<<gz<<": "<<tv.frames.at(gh).items.at(gz).category<<"_"<<tv.frames.at(gh).items.at(gz).instance<<endl;
+	    }
 	    string string_use63;
 	    string string_threshold;
 	    string string_featuresUsed;
@@ -653,8 +756,15 @@ int main(int argc, char * argv[])
 	    
 	    if(testselected == true)
 	    {
-		//ci sarà solo una categoria
-		categoriesToCheck.push_back(all_categories.front());
+		if(multiClass == false)
+		{
+		    //ci sarà solo una categoria
+		    categoriesToCheck.push_back(all_categories.front());
+		}
+		else
+		{
+		    categoriesToCheck = all_categories;
+		}
 	    }
 	    else
 	    {
@@ -680,6 +790,7 @@ int main(int argc, char * argv[])
 		    categoriesToCheck = table_small_2_categories;
 	    }
 	    
+	    vector<pair<string,string> > tmp_categoriesToCheck;
 	    for(int test11 = 0; test11<categoriesToCheck.size(); test11++)
 	    {
 		
@@ -691,8 +802,11 @@ int main(int argc, char * argv[])
 		    pulisci_risultati(numPipelines, actual_use63, actual_featuresUsed, actual_signFeat, actual_punteggio16, actual_featuresSignatureCandidates, actual_grayEnabled, actual_signatureEnabled, actual_threshold_rgb, actual_matching_threshold, class_id, nomeVideo);
 		else
 		{
-		    vector<pair<string,string> > tmp_categoriesToCheck;
-		    tmp_categoriesToCheck.push_back(category);
+		    
+		    if(multiClass == false)
+			tmp_categoriesToCheck.push_back(category);
+		    else
+			tmp_categoriesToCheck = categoriesToCheck;
 		    
 		    vector<VideoResult> videoResults;
 		    for(int nm= 0; nm<numPipelines; nm++)
@@ -700,13 +814,30 @@ int main(int argc, char * argv[])
 		    
 		    if(testselected == false || fromselected == false)
 		    {
-			filename = "./templates/" + class_id + "/" + string_use63 + "_" + string_featuresUsed + "_" + string_signFeat + "_" + string_threshold + ".yml";
-			templateMapName = "./templates/" + class_id + "/" + "templatesMap_" + string_use63 + "_" + string_featuresUsed + "_" + string_signFeat + "_" + string_threshold + ".yml";
+			if(multiClass == false)
+			{
+			    filename = "./templates/" + class_id + "/" + string_use63 + "_" + string_featuresUsed + "_" + string_signFeat + "_" + string_threshold + ".yml";
+			    templateMapName = "./templates/" + class_id + "/" + "templatesMap_" + string_use63 + "_" + string_featuresUsed + "_" + string_signFeat + "_" + string_threshold + ".yml";
+			}
+			else //multiclass == true
+			{
+			    filename = "./templates/multiClass/" + string_use63 + "_" + string_featuresUsed + "_" + string_signFeat + "_" + string_threshold + ".yml";
+			    templateMapName = "./templates/multiClass/templatesMap_" + string_use63 + "_" + string_featuresUsed + "_" + string_signFeat + "_" + string_threshold + ".yml";
+			}
+			
 		    }
 		    else //fromselected == true, quindi lo prendo dalla cartella
 		    {
-			filename = "./selected/" + class_id + "_" + string_use63 + "_" + string_featuresUsed + "_" + string_signFeat + "_" + string_threshold + ".yml";
-			templateMapName = "./selected/" + class_id + "_" + "templatesMap_" + string_use63 + "_" + string_featuresUsed + "_" + string_signFeat + "_" + string_threshold + ".yml";
+			if(multiClass == false)
+			{
+			    filename = "./selected/" + class_id + "_" + string_use63 + "_" + string_featuresUsed + "_" + string_signFeat + "_" + string_threshold + ".yml";
+			    templateMapName = "./selected/" + class_id + "_" + "templatesMap_" + string_use63 + "_" + string_featuresUsed + "_" + string_signFeat + "_" + string_threshold + ".yml";
+			}
+			else //multiclass == true
+			{
+			    filename = "./selected/multiClass_" + string_use63 + "_" + string_featuresUsed + "_" + string_signFeat + "_" + string_threshold + ".yml";
+			    templateMapName = "./selected/multiClass_templatesMap_" + string_use63 + "_" + string_featuresUsed + "_" + string_signFeat + "_" + string_threshold + ".yml";
+			}
 		    }
 		    
 		    cv::Mat color, depth;
@@ -737,6 +868,8 @@ int main(int argc, char * argv[])
 		    cout<<endl<<"FRAME ";
 		    while (current <= framesNumber)
 		    {
+			bool videoImageAdded = false;
+			bool videoDraw = false;
 			cout<<"-"<<current<<flush; 
 			stringstream out;
 			out << current;
@@ -772,7 +905,7 @@ int main(int argc, char * argv[])
 			    match_timer.start();
 			    detector->match(sources, actual_matching_threshold, matches, class_ids, quantized_images);
 			    match_timer.stop();
-
+			    printf("Matching single: %.2fs\n", match_timer.time());
 			    int classes_visited = 0;
 			    std::set<std::string> visited;
 			    
@@ -794,10 +927,11 @@ int main(int argc, char * argv[])
 				if(nm == curMatch)
 				    displayRects = true;
 				//controllo falsi negativi e falsi positivi
+				cout<<"PRIMA DI TEST: "<<tmp_categoriesToCheck.size()<<endl;
 				checkFrameFalses(matches[nm], tv.frames.at(current-1), tmp_categoriesToCheck, detector, videoResults[nm], display, displayRects);
 			    }
 			    
-			    bool checkAllMatches = true;
+			    bool checkAllMatches = false;
 			    
 			    if(checkAllMatches == false)
 			    {
@@ -831,7 +965,14 @@ int main(int argc, char * argv[])
 				    if(!TESTING)
 				    {
 					const std::vector<cv::my_linemod::Template>& templates = detector->getTemplates(m.class_id, m.template_id);
-					drawResponse(templates, num_modalities, display, cv::Point(m.x, m.y), detector->getT(0), m.scartato, m.class_id.c_str(), tv.frames.at(current-1));
+					cout<<"frame gt: "<<tv.frames.at(current-1).nItem<<endl;
+					drawResponse(templates, num_modalities, display, cv::Point(m.x, m.y), detector->getT(0), m.scartato, m.suppressed, m.class_id.c_str(), tv.frames.at(current-1));
+					if(videoDraw == false)
+					    outputVideo<<display;
+					else
+					    videoDraw = false;
+					videoImageAdded = true;
+					videoDraw = true;
 				    }
 				    
 				  }
@@ -848,8 +989,8 @@ int main(int argc, char * argv[])
 				  cv::my_linemod::Match m = matches[curMatch][i];
 
 				      
-				      printf("Similarity: %5.1f%%; Similarity_rgb: %5.1f%%; x: %3d; y: %3d; class: %s; template: %3d",
-					     m.similarity, m.similarity_rgb, m.x, m.y, m.class_id.c_str(), m.template_id);
+				      printf("Similarity: %5.1f%%; Similarity_rgb: %5.1f%%; suppressed: %3d; x: %3d; y: %3d; class: %s; template: %3d",
+					     m.similarity, m.similarity_rgb, m.suppressed, m.x, m.y, m.class_id.c_str(), m.template_id);
 					     
 				      if(templateMap.find(m.class_id + "_" + intToString(m.template_id)) != templateMap.end())
 				      {
@@ -869,7 +1010,7 @@ int main(int argc, char * argv[])
 				    if(!TESTING)
 				    {
 					const std::vector<cv::my_linemod::Template>& templates = detector->getTemplates(m.class_id, m.template_id);
-					drawResponse(templates, num_modalities, display, cv::Point(m.x, m.y), detector->getT(0), m.scartato, m.class_id.c_str(), tv.frames.at(current-1));
+					drawResponse(templates, num_modalities, display, cv::Point(m.x, m.y), detector->getT(0), m.scartato, m.suppressed, m.class_id.c_str(), tv.frames.at(current-1));
 				    }
 				  
 				  
@@ -918,6 +1059,12 @@ int main(int argc, char * argv[])
 			    if(DEBUGGING) cout<<immagineRoi<< "non trovata"<<std::endl;
 			}
 			current++;
+			
+			if(videoImageAdded == false)
+			{
+			    outputVideo<<color;
+			}
+			
 		    }		
 		    //SALVA RISULTATI
 		    if(testselected == false)
@@ -940,6 +1087,13 @@ int main(int argc, char * argv[])
 	}
 	one_video_loop_timer.stop();
 	cout<<endl<<endl<<"1 VIDEO LOOP TIME: "<<one_video_loop_timer.time()<<endl<<endl;
+	//bool precisionRecall = checkPrecisionRecall(/*nm*/0, nomiVideo, actual_threshold_rgb, actual_use63, actual_featuresUsed, actual_signFeat, all_categories, false);
+	bool precisionRecall = true;
+	if(precisionRecall == false)
+	{
+	    cout<<"FINITI PER LA PRECISION RECALL"<<endl;
+	    return 0;
+	}
     }
     }
     }
@@ -958,7 +1112,7 @@ int main(int argc, char * argv[])
 
 
 void drawResponse(const std::vector<cv::my_linemod::Template>& templates, 
-                  int num_modalities, cv::Mat& dst, cv::Point offset, int T, short scartato, string class_id, VideoFrame videoFrame)
+                  int num_modalities, cv::Mat& dst, cv::Point offset, int T, short scartato, int suppressed, string class_id, VideoFrame videoFrame)
 {
   static const cv::Scalar COLORS[5] = { CV_RGB(0, 0, 255),
                                         CV_RGB(0, 255, 0),
@@ -1013,35 +1167,60 @@ void drawResponse(const std::vector<cv::my_linemod::Template>& templates,
         const cv::Scalar blue = CV_RGB(0,0,255);
         const cv::Scalar yellow = CV_RGB(255,255,0);
         
-        for(int j = 0; j<videoFrame.nItem; j++)
-        {
-            Item item = videoFrame.items.at(j);
-            string formattedCategory = getFormattedCategory(item.category, item.instance);
-            if(DEBUGGING) cout<<endl<<"formatted: "<<formattedCategory<<endl;;
-            if(DEBUGGING) cout<<"class_id: "<<class_id<<endl;
-            if(formattedCategory == class_id)
-            {
-                Rect_<int> Bgt = Rect_<int>(item.left, item.top, item.right-item.left, item.bottom-item.top);
-                Rect_<int> Ba = Rect_<int>(offset.x, offset.y, (offset.x+templates[m].width - offset.x), (offset.y+templates[m].height - offset.y));
-                Rect_<int> intersection = Bgt & Ba;
-                float areaIntersection = (float)intersection.area();
-                float areaUnion = (float)(Bgt.area()+Ba.area())-areaIntersection;
-                float result = areaIntersection/areaUnion;
-                if(DEBUGGING) cout<<"intersezione: "<<areaIntersection<<endl;
-                if(DEBUGGING) cout<<"union: "<<areaUnion<<endl;
-                if(DEBUGGING) cout<<"result: "<<result<<endl;
-                
-                //disegno gt e intersezione buona
-                rectangle(dst, cv::Point(Bgt.x,Bgt.y), cv::Point(Bgt.x+Bgt.width,Bgt.y+Bgt.height), blue, 2);
-                rectangle(dst, cv::Point(Ba.x,Ba.y), cv::Point(Ba.x+Ba.width,Ba.y+Ba.height), yellow, 2);
-                
-                if(result >= 0.4)
-                    cv::circle(dst, cv::Point(Ba.x+Ba.width/2,Ba.y+Ba.height/2), 15, green, -1);
-                else
-                    cv::circle(dst, cv::Point(Ba.x+Ba.width/2,Ba.y+Ba.height/2), 15, red, -1);
-                
-            }
-        }
+	cout<<"MOSTRO: "<<videoFrame.nItem<<endl;
+	if(videoFrame.nItem>0)
+	{
+	    for(int j = 0; j<videoFrame.nItem; j++)
+	    {
+		Item item = videoFrame.items.at(j);
+		string formattedCategory = getFormattedCategory(item.category, item.instance);
+		if(DEBUGGING) cout<<endl<<"formatted: "<<formattedCategory<<endl;;
+		if(DEBUGGING) cout<<"class_id: "<<class_id<<endl;
+		if(formattedCategory == class_id)
+		{
+		    Rect_<int> Bgt = Rect_<int>(item.left, item.top, item.right-item.left, item.bottom-item.top);
+		    Rect_<int> Ba = Rect_<int>(offset.x, offset.y, (offset.x+templates[m].width - offset.x), (offset.y+templates[m].height - offset.y));
+		    Rect_<int> intersection = Bgt & Ba;
+		    float areaIntersection = (float)intersection.area();
+		    float areaUnion = (float)(Bgt.area()+Ba.area())-areaIntersection;
+		    float result = areaIntersection/areaUnion;
+		    if(DEBUGGING) cout<<"intersezione: "<<areaIntersection<<endl;
+		    if(DEBUGGING) cout<<"union: "<<areaUnion<<endl;
+		    if(DEBUGGING) cout<<"result: "<<result<<endl;
+		    
+		    //disegno gt e intersezione buona
+		    rectangle(dst, cv::Point(Bgt.x,Bgt.y), cv::Point(Bgt.x+Bgt.width,Bgt.y+Bgt.height), blue, 2);
+		    rectangle(dst, cv::Point(Ba.x,Ba.y), cv::Point(Ba.x+Ba.width,Ba.y+Ba.height), yellow, 2);
+		    //string text = "sop: " + intToString(suppressed); 
+		    if(class_id == "flashlight_2")
+		    {
+			string text = "flashlight_red";
+			putText(dst, text, cv::Point(Ba.x-10,Ba.y-5), FONT_HERSHEY_SIMPLEX, 1, red); 
+		    }
+		    else if(class_id == "flashlight_5")
+		    {
+			string text = "flashlight_yellow";
+			putText(dst, text, cv::Point(Ba.x-10,Ba.y-5), FONT_HERSHEY_SIMPLEX, 1, yellow); 
+		    }
+		    if(result >= 0.4)
+			cv::circle(dst, cv::Point(Ba.x+Ba.width/2,Ba.y+Ba.height/2), 15, green, -1);
+		    else
+			cv::circle(dst, cv::Point(Ba.x+Ba.width/2,Ba.y+Ba.height/2), 15, red, -1);
+		    
+		}
+	    }
+	}
+	else
+	{
+	    
+	    //Rect_<int> Ba = Rect_<int>(offset.x, offset.y, (offset.x+templates[m].width - offset.x), (offset.y+templates[m].height - offset.y));
+	    //string text = "Flashlight_5"; 
+	    //putText(dst, text, cv::Point(Ba.x-10,Ba.y-5), FONT_HERSHEY_SIMPLEX, 1, yellow); 
+	    //rectangle(dst, cv::Point(Ba.x,Ba.y), cv::Point(Ba.x+Ba.width,Ba.y+Ba.height), red, 2);
+	}
+	
+	
+	
     }
     
   }
