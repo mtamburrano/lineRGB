@@ -1,0 +1,49 @@
+cmake_minimum_required(VERSION 2.8)
+
+find_package(OpenCV REQUIRED)
+include_directories (${OpenCV_INCLUDE_DIR} )
+
+link_directories (${cvimpulso_SOURCE_DIR}/lib)
+
+
+FILE(GLOB line_rgb_source *.cpp)
+
+
+ADD_LIBRARY(line_rgb SHARED ${line_rgb_source})
+
+target_link_libraries(line_rgb ${OpenCV_LIBS})
+
+add_executable (line_test line_test.cpp)
+target_link_libraries(line_test line_rgb )
+
+#message(STATUS "gui:        ${GTK_INTERFACE}")
+
+if(GTK_INTERFACE)
+	target_link_libraries(cvimpulso impulsoGUI )
+endif()
+target_link_libraries(impulsoEvents impulsoDomain)
+target_link_libraries(cvimpulso impulsoMonitoring impulsoDomain impulsoEvents impulsoTracking )
+
+add_executable(calcRT utils/calcRT.cpp)
+target_link_libraries(calcRT ${OpenCV_LIBS} ${Boost_SERIALIZATION_LIBRARY})
+
+add_executable(client_example utils/client_example.cpp)
+target_link_libraries(client_example msgpack-rpc msgpack mpio)
+
+add_executable(videoRecorder utils/VideoRec/VideoRecorder.cpp utils/VideoRec/VideoRecController.cpp)
+target_link_libraries(videoRecorder ${OpenCV_LIBS})
+
+install(TARGETS impulso impulsoGUI impulsoDomain impulsoEvents impulsoTracking impulsoMonitoring cvimpulso calcRT videoRecorder
+        RUNTIME DESTINATION bin
+        LIBRARY DESTINATION lib
+        ARCHIVE DESTINATION lib/static
+)
+set_property(
+   TARGET impulsoGUI impulso
+   PROPERTY COMPILE_DEFINITIONS DATADIR=/usr/local/share/cvimpulso/
+   ) 
+   
+set_property(
+   TARGET impulsoGUI impulso
+   PROPERTY COMPILE_DEFINITIONS SYSCONFDIR=/usr/local/etc/cvimpulso/
+   ) 
