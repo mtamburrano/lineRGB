@@ -18,6 +18,8 @@
 using namespace std;
 using namespace cv;
 
+static const bool DEBUG = false;
+
 static void help_f() {
     printf(
             "\n\n"
@@ -349,9 +351,58 @@ int main(int argc, char * argv[]) {
                             int template_id;
 
                             if (linergb == true)
-                                template_id = detector_rgb->addTemplate(
+                            {
+                                    template_id = detector_rgb->addTemplate(
+
                                         sourcesTemplate, class_id, mask_final,
                                         &bb);
+                                ///////////DEBUG/////////////////////////////
+                                if(DEBUG == true && iterRot == 1 && iter == 4)
+                                {
+                                    const std::vector<cv::line_rgb::Template>& templates = detector_rgb->getTemplates(class_id, template_id);
+                                    for (int l = 0; l < (int)templates[0].features.size(); ++l)
+                                    {
+                                      cv::Scalar colorT;
+                                      cv::line_rgb::Feature f = templates[0].features[l];
+                                      cv::Point pt(f.x + bb.x, f.y +bb.y);
+                                      switch(f.rgb_label)
+                                      {
+                                      case 0:
+                                          colorT = CV_RGB(255, 0, 0);
+                                          break;
+                                      case 1:
+                                          colorT = CV_RGB(0, 255, 0);
+                                          break;
+                                      case 2:
+                                          colorT = CV_RGB(0, 0, 255);
+                                          break;
+                                      case 3:
+                                          colorT = CV_RGB(255, 255, 0);
+                                          break;
+                                      case 4:
+                                          colorT = CV_RGB(255, 0, 255);
+                                          break;
+                                      case 5:
+                                          colorT = CV_RGB(0, 255, 255);
+                                          break;
+                                      case 6:
+                                          colorT = CV_RGB(255, 255, 255);
+                                          break;
+                                      case 7:
+                                          colorT = CV_RGB(0, 0, 0);
+                                          break;
+
+                                      }
+                                     //if(f.onBorder == true)
+                                        rectangle(single_source_final, bb, CV_RGB(0,0,0), 2);
+                                        cv::circle(single_source_final, pt, 1, colorT);
+                                    }
+                                    imshow("color_rotated_featured", single_source_final);
+                                    waitKey();
+                                    /////////fine debug//////////////////
+                                }
+                            }
+
                             if (line2d == true)
                                 template_id = detector_line2d->addTemplate(
                                         sourcesTemplate, class_id, mask_final,
@@ -603,7 +654,7 @@ void drawResponseLineRGB(const std::vector<cv::line_rgb::Template>& templates,
         int num_modalities, cv::Mat& dst, cv::Point offset, int T,
         short rejected, string class_id) {
 
-    cv::Scalar color;
+    cv::Scalar colorT;
     for (int m = 0; m < num_modalities; ++m) {
 
         for (int i = 0; i < (int) templates[m].features.size(); ++i) {
@@ -611,32 +662,32 @@ void drawResponseLineRGB(const std::vector<cv::line_rgb::Template>& templates,
             cv::Point pt(f.x + offset.x, f.y + offset.y);
             switch (f.rgb_label) {
             case 0:
-                color = CV_RGB(255, 0, 0);
-                break;
-            case 1:
-                color = CV_RGB(0, 255, 0);
-                break;
-            case 2:
-                color = CV_RGB(0, 0, 255);
-                break;
-            case 3:
-                color = CV_RGB(255, 255, 0);
-                break;
-            case 4:
-                color = CV_RGB(255, 0, 255);
-                break;
-            case 5:
-                color = CV_RGB(0, 255, 255);
-                break;
-            case 6:
-                color = CV_RGB(255, 255, 255);
-                break;
-            case 7:
-                color = CV_RGB(0, 0, 0);
-                break;
+                  colorT = CV_RGB(255, 0, 0);
+                  break;
+              case 1:
+                  colorT = CV_RGB(0, 255, 0);
+                  break;
+              case 2:
+                  colorT = CV_RGB(0, 0, 255);
+                  break;
+              case 3:
+                  colorT = CV_RGB(255, 255, 0);
+                  break;
+              case 4:
+                  colorT = CV_RGB(255, 0, 255);
+                  break;
+              case 5:
+                  colorT = CV_RGB(0, 255, 255);
+                  break;
+              case 6:
+                  colorT = CV_RGB(255, 255, 255);
+                  break;
+              case 7:
+                  colorT = CV_RGB(0, 0, 0);
+                  break;
             }
 
-            cv::circle(dst, pt, T / 2, color);
+            cv::circle(dst, pt, T / 2, colorT);
         }
 
     }
@@ -687,7 +738,7 @@ void writeLineRGB(const cv::Ptr<cv::line_rgb::Detector>& detector,
         fs << "}"; // current class
     }
     fs << "]"; // classes
-    //fs.releaseAndGetString();
+    fs.releaseAndGetString();
 }
 
 // Functions to store detector and templates in single XML/YAML file
@@ -716,6 +767,7 @@ static void writeLine2D(const cv::Ptr<cv::linemod::Detector>& detector,
         fs << "}"; // current class
     }
     fs << "]"; // classes
+    fs.releaseAndGetString();
 }
 
 Mat rotateImage(const Mat& source, double angle) {

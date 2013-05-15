@@ -80,6 +80,20 @@
 namespace cv {
 namespace line_rgb {
 
+void writeMat(Mat m, string name, int n)
+{
+    std::stringstream ss;
+    string s;
+    ss << n;
+    ss >> s;
+    string fileNameConf = name + s;
+    FileStorage fsConf(fileNameConf, FileStorage::WRITE);
+    fsConf << "m" << m;
+
+    fsConf.release();
+}
+
+
 class Timer {
 public:
     Timer() :
@@ -348,13 +362,6 @@ int *bar(int *array) {
     return start;
 }
 
-void writeMat(Mat& m) {
-    string fileNameConf = "./matrice_stampata.txt";
-    FileStorage fsConf(fileNameConf, FileStorage::WRITE);
-    fsConf << "m" << m;
-
-    fsConf.release();
-}
 
 /** 
  * \brief returns if the values of 3 channels are similar to black or to white 
@@ -824,7 +831,6 @@ uchar votesRgbMag(int c, int r, float mag_center, uchar p_angle, const Mat& rgb,
     //check if enough neighbors are inside the mask
     int neighThresh = ((kernelSize * kernelSize) / 2) + 1;
     if (countInMask < neighThresh) {
-
         if (offsetPlusMinus == 0)
             offsetPlusMinus = 8;
         else
@@ -857,7 +863,9 @@ uchar votesRgbMag(int c, int r, float mag_center, uchar p_angle, const Mat& rgb,
 
     uchar result;
     if (index != -1)
+    {
         result = (uchar) pow(2, index);
+    }
     else {
         const uchar* rgb_r = rgb.ptr < uchar > (r);
         result = rgb_r[c];
@@ -931,10 +939,12 @@ bool ColorGradientPyramid::extractTemplate(Template& templ) const {
                             //Voting color neighbors
                             uchar voted = votesRgbMag(c, r, score, quantized,
                                     rgb, magnitude, mask, central_mass);
+
                             candidates.push_back(
                                     Candidate(c, r, getLabel(quantized),
                                             getLabel(voted), true, score));
                             on_borderCount++;
+
                         } else
                             candidates.push_back(
                                     Candidate(c, r, getLabel(quantized),
@@ -1584,11 +1594,14 @@ void computeResponseMapsRGB(const Mat& src, std::vector<Mat>& response_maps) {
             for (int ori = 0; ori < 8; ori++) {
                 response_maps[ori].at < uchar > (r, c) =
                         SIMILARITY_RGB_LUT[ori][(int) src_r[c]];
+
             }
 
         }
 
     }
+    for(int i = 0; i<8; i++)
+        writeMat(response_maps[i], "responseMap", i);
 
 }
 
@@ -1606,6 +1619,8 @@ void linearize(const Mat& response_map, Mat& linearized, int T) {
 
     CV_Assert(response_map.rows % T == 0);
     CV_Assert(response_map.cols % T == 0);
+
+//    writeMat(response_map, "0");
 
     // linearized has T^2 rows, where each row is a linear memory
     int mem_width = response_map.cols / T;
@@ -2082,8 +2097,8 @@ void similarityLocalRGB(const std::vector<Mat>& linear_memories,
     //if(haveSSE2 || haveSSE3)
     __m128i* dst_ptr_sse = dst.ptr<__m128i>();
     __m128i* dst_ptr_rgb_sse = dst_rgb.ptr<__m128i>();
-    haveSSE2 = false;
-//haveSSE3 = false;
+
+
 //#endif
 
     int total_features_size;
@@ -2354,6 +2369,9 @@ void Detector::match(const std::vector<Mat>& sources, float threshold,
         for (int i = 0; i < (int) quantizers.size(); ++i) {
             quantizers[i]->quantize(quantized);
             quantizers[i]->quantizeRGB(quantized_rgb);
+
+            //writeMat(quantized_rgb, "0");
+
             spread(quantized, spread_quantized, T);
             spread(quantized_rgb, spread_quantized_rgb, T);
 
@@ -2366,6 +2384,7 @@ void Detector::match(const std::vector<Mat>& sources, float threshold,
             for (int j = 0; j < 8; ++j) {
                 linearize(response_maps[j], memories[j], T);
                 linearize(response_maps_rgb[j], memories_rgb[j], T);
+                //writeMat(memories_rgb[j], "2");
             }
 
             if (quantized_images.needed()) //use copyTo here to side step reference semantics.
@@ -2540,6 +2559,7 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
 
             for (int c = 0; c < total_similarity.cols; ++c) {
                 int raw_score = row[c];
+
                 int raw_score_rgb = row_rgb[c];    //*modalities.size();
 
                 int raw_score_combined = (raw_score + raw_score_rgb) / 2;
@@ -2632,6 +2652,7 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
                     ushort* row_rgb = total_similarity_rgb.ptr < ushort > (r);
                     for (int c = 0; c < total_similarity.cols; ++c) {
                         int score = row[c];
+
                         int score_rgb = row_rgb[c] * modalities.size();
 
                         score = (score * 100.f) / (4 * num_features);
@@ -2644,7 +2665,9 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
                                     / (16 * (num_features + num_color_features))
                                     + 0.5f;
 
-                        int score_combined = (score + score_rgb) / 2;
+                        //int score_combined = (score + score_rgb) / 2;
+                        //ricordati di cambiare il matchpredicate!!!!!!!!!!!!!!
+                        int score_combined = ((score/100) * 80) + ((score_rgb/100)*20);
 
                         if (score_combined > best_score_combined) {
                             best_score_combined = score_combined;
@@ -2671,13 +2694,13 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
             std::vector<Match>::iterator new_end;
             std::vector<Match>::iterator new_end_rgb;
 
-            new_end = std::remove_if(candidates.begin(), candidates.end(),
+            /*new_end = std::remove_if(candidates.begin(), candidates.end(),
                     MatchPredicate(threshold));
             candidates.erase(new_end, candidates.end());
 
             new_end_rgb = std::remove_if(candidates.begin(), candidates.end(),
                     MatchPredicateRGB(threshold));
-            candidates.erase(new_end_rgb, candidates.end());
+            candidates.erase(new_end_rgb, candidates.end());*/
 
         }
 

@@ -16,3 +16,6 @@ target_link_libraries(line_rgb ${OpenCV_LIBS})
 add_executable (line_test line_test.cpp)
 target_link_libraries(line_test line_rgb )
 
+add_executable (line_camera_rgb utils/line_camera_rgb.cpp)
+target_link_libraries(line_camera_rgb line_rgb )
+
