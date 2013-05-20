@@ -162,7 +162,7 @@ int main(int argc, char * argv[])
   bool show_timings = false;
   bool learn_online = false;
   int num_classes = 0;
-  int matching_threshold = 80;
+  int matching_threshold = 90;
   /// @todo Keys for changing these?
   cv::Size roi_size(200, 200);
   int learning_lower_bound = 90;
@@ -225,6 +225,7 @@ int main(int argc, char * argv[])
     std::vector<cv::Mat> sources;
     sources.push_back(color);
     sources.push_back(depth);
+
     cv::Mat display = color.clone();
 
     if (!learn_online)
@@ -249,7 +250,10 @@ int main(int argc, char * argv[])
         subtractPlane(depth, mask, chain, focal_length);
 
         cv::imshow("mask", mask);
-
+        std::cout<<"color.size(): "<<color.size()<<std::endl;
+        std::cout<<"depth.size(): "<<depth.size()<<" - depth.type(): "<<depth.type()<<"depth.elemSize(): "<<depth.elemSize()<<std::endl;
+        //std::cout<< std::endl<< depth<<std::endl;
+        cv::waitKey();
         // Extract template
         std::string class_id = cv::format("class%d", num_classes);
         cv::Rect bb;
