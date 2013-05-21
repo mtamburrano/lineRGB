@@ -66,6 +66,7 @@
 
 #include "objdetect_line_rgb.hpp"
 #include <limits>
+#include "opencv2/highgui/highgui.hpp"
 #include "opencv2/imgproc/imgproc.hpp"
 #include "opencv2/imgproc/imgproc_c.h"
 #include "opencv2/core/core_c.h"
@@ -75,10 +76,12 @@
 #include <iomanip>
 #include <cmath>
 
+
 //#include "opencv2/objdetect/objdetect_tegra.hpp"
 
 namespace cv {
 namespace line_rgb {
+
 
 void writeMat(Mat m, string name, int n)
 {
@@ -177,6 +180,7 @@ Rect cropTemplates(std::vector<Template>& templates, const Mat& mask_template) {
 
     // First pass: find min/max feature x,y over all pyramid levels and modalities
     for (int i = 0; i < (int) templates.size(); ++i) {
+
         Template& templ = templates[i];
 
         for (int j = 0; j < (int) templ.features.size(); ++j) {
@@ -472,14 +476,14 @@ void quantizedOrientations(const Mat& src, Mat& magnitude, Mat& angle, Mat& rgb,
     Mat smoothed;
 
     // Compute horizontal and vertical image derivatives on all color channels separately
-    static const int KERNEL_SIZE = 3;
+    static const int KERNEL_SIZE = 7;
 
     // For some reason cvSmooth/cv::GaussianBlur, cvSobel/cv::Sobel have different defaults for border handling...
     GaussianBlur(src, smoothed, Size(KERNEL_SIZE, KERNEL_SIZE), 0, 0,
             BORDER_REPLICATE);
-    Sobel(smoothed, sobel_3dx, CV_16S, 1, 0, KERNEL_SIZE/*CV_SCHARR*/, 1.0, 0.0,
+    Sobel(smoothed, sobel_3dx, CV_16S, 1, 0, 3/*CV_SCHARR*/, 1.0, 0.0,
             BORDER_REPLICATE);
-    Sobel(smoothed, sobel_3dy, CV_16S, 0, 1, KERNEL_SIZE/*CV_SCHARR*/, 1.0, 0.0,
+    Sobel(smoothed, sobel_3dy, CV_16S, 0, 1, 3/*CV_SCHARR*/, 1.0, 0.0,
             BORDER_REPLICATE);
 
     short * ptrx = (short *) sobel_3dx.data;
@@ -880,10 +884,12 @@ bool ColorGradientPyramid::extractTemplate(Template& templ) const {
     Mat local_mask;
     Mat border_mask;
 
+    bool only_border = true;
     if (!mask.empty()) {
-        mask.copyTo(local_mask);
+
         erode(mask, border_mask, Mat(), Point(-1, -1), 3, BORDER_REPLICATE);
         subtract(mask, border_mask, border_mask);
+        mask.copyTo(local_mask);
     }
 
     // Create sorted list of all pixels with magnitude greater than a threshold
@@ -923,7 +929,7 @@ bool ColorGradientPyramid::extractTemplate(Template& templ) const {
                     quantCount++;
                 }
 
-                if (pyramid_level == 1 && !border_mask_r[c]) {
+                if (!border_mask_r[c]) {
                     candidates_color_features.push_back(
                             Candidate(c, r, -1, getLabel(quantized_rgb), false,
                                     -1));
@@ -945,7 +951,7 @@ bool ColorGradientPyramid::extractTemplate(Template& templ) const {
                                             getLabel(voted), true, score));
                             on_borderCount++;
 
-                        } else
+                        } else if(only_border == false)
                             candidates.push_back(
                                     Candidate(c, r, getLabel(quantized),
                                             getLabel(quantized_rgb), false,
@@ -966,9 +972,9 @@ bool ColorGradientPyramid::extractTemplate(Template& templ) const {
     // NOTE: Stable sort to agree with old code, which used std::list::sort()
     std::stable_sort(candidates.begin(), candidates.end());
 
-    if (pyramid_level == 1 && on_borderCount <= (candidates.size() / 2)) {
+    if (on_borderCount <= (candidates.size() / 2)) {
         candidates_color_features.clear();
-    } else if (pyramid_level == 1) {
+    } else {
         selectScatteredFeatures(candidates_color_features, templ.color_features,
                 num_color_features, color_distance);
     }
@@ -986,7 +992,7 @@ bool ColorGradientPyramid::extractTemplate(Template& templ) const {
 }
 
 ColorGradient::ColorGradient() :
-        weak_threshold(50.0f), num_features(126), strong_threshold(70.0f), threshold_rgb(
+        weak_threshold(50.0f), num_features(63), strong_threshold(70.0f), threshold_rgb(
                 65) {
 }
 
@@ -1576,6 +1582,8 @@ void computeResponseMaps(const Mat& src, std::vector<Mat>& response_maps) {
 
         }
     }
+//    for(int i = 0; i<8; i++)
+//            writeMat(response_maps[i], "responseMap", i);
 }
 
 void computeResponseMapsRGB(const Mat& src, std::vector<Mat>& response_maps) {
@@ -1600,8 +1608,7 @@ void computeResponseMapsRGB(const Mat& src, std::vector<Mat>& response_maps) {
         }
 
     }
-    for(int i = 0; i<8; i++)
-        writeMat(response_maps[i], "responseMap", i);
+
 
 }
 
@@ -2244,6 +2251,19 @@ void addUnaligned8u16u(const uchar * src1, const uchar * src2, ushort * res,
     }
 }
 
+void addUnaligned16u16u(const ushort * src1, const uchar * src2, ushort * res,
+        int length) {
+    const ushort * end = src1 + length;
+
+    while (src1 != end) {
+        *res = *src1 + (ushort)*src2;
+
+        ++src1;
+        ++src2;
+        ++res;
+    }
+}
+
 /**
  * \brief Accumulate one or more 8-bit similarity images.
  *
@@ -2257,7 +2277,7 @@ void addSimilarities(const std::vector<Mat>& similarities, Mat& dst) {
     } else {
         // NOTE: add() seems to be rather slow in the 8U + 8U -> 16U case
         dst.create(similarities[0].size(), CV_16U);
-        addUnaligned8u16u(similarities[0].ptr(), similarities[1].ptr(),
+        addUnaligned16u16u(similarities[0].ptr<ushort>(), similarities[1].ptr(),
                 dst.ptr<ushort>(), static_cast<int>(dst.total()));
 
         /// @todo Optimize 16u + 8u -> 16u when more than 2 modalities
@@ -2349,7 +2369,7 @@ void Detector::match(const std::vector<Mat>& sources, float threshold,
                     > (modalities.size(), LinearMemories(8)));
     LinearMemoryPyramid lm_pyramid_rgb(pyramid_levels,
             std::vector < LinearMemories
-                    > (modalities.size(), LinearMemories(8)));
+                    > (1, LinearMemories(8)));
 
     // For each pyramid level, precompute linear memories for each modality
     std::vector < Size > sizes;
@@ -2368,23 +2388,26 @@ void Detector::match(const std::vector<Mat>& sources, float threshold,
         std::vector < Mat > response_maps_rgb;
         for (int i = 0; i < (int) quantizers.size(); ++i) {
             quantizers[i]->quantize(quantized);
-            quantizers[i]->quantizeRGB(quantized_rgb);
+            if(i == 0) //first modality
+                quantizers[i]->quantizeRGB(quantized_rgb);
 
             //writeMat(quantized_rgb, "0");
 
             spread(quantized, spread_quantized, T);
-            spread(quantized_rgb, spread_quantized_rgb, T);
+            if(i == 0) //first modality
+                spread(quantized_rgb, spread_quantized_rgb, T);
 
             computeResponseMaps(spread_quantized, response_maps);
-            computeResponseMapsRGB(spread_quantized_rgb, response_maps_rgb);
+            if(i == 0) //first modality
+                computeResponseMapsRGB(spread_quantized_rgb, response_maps_rgb);
 
             LinearMemories& memories = lm_level[i];
             LinearMemories& memories_rgb = lm_level_rgb[i];
 
             for (int j = 0; j < 8; ++j) {
                 linearize(response_maps[j], memories[j], T);
-                linearize(response_maps_rgb[j], memories_rgb[j], T);
-                //writeMat(memories_rgb[j], "2");
+                if(i == 0) //first modality
+                    linearize(response_maps_rgb[j], memories_rgb[j], T);
             }
 
             if (quantized_images.needed()) //use copyTo here to side step reference semantics.
@@ -2425,7 +2448,6 @@ void Detector::match(const std::vector<Mat>& sources, float threshold,
 
     if (matches.size() > 0) {
 
-        for (int m = 0; m < modalities.size(); ++m) {
             int not_rejected = 0;
 
             for (std::vector<Match>::iterator it_rejected = matches.begin();
@@ -2464,7 +2486,7 @@ void Detector::match(const std::vector<Mat>& sources, float threshold,
 
                 int diff_features = count_magnitude
                         - templates[0].total_candidates;
-                int allowed_more_mag = 1;
+                int allowed_more_mag = 5;
                 int thresh_allow = (templates[0].total_candidates / 100)
                         * allowed_more_mag;
                 int impact = 0;
@@ -2483,13 +2505,23 @@ void Detector::match(const std::vector<Mat>& sources, float threshold,
 
             }
 
+            std::cout<<"prima rejected"<<std::endl;
+            for(int h = 0; h<matches.size(); ++h)
+            {
+                std::cout<<"match.similarity: "<<matches[h].similarity<<" - match.similarity_rgb: "<<matches[h].similarity_rgb<<std::endl;
+            }
             //erase the rejected matches
             std::vector<Match>::iterator new_begin = matches.begin();
             std::vector<Match>::iterator new_end_rejected = std::remove_if(
                     new_begin, matches.end(), RejectedPredicate());
             matches.erase(new_end_rejected, matches.end());
+            std::cout<<"dopo rejected"<<std::endl;
+            for(int h = 0; h<matches.size(); ++h)
+            {
+                std::cout<<"match.similarity: "<<matches[h].similarity<<" - match.similarity_rgb: "<<matches[h].similarity_rgb<<std::endl;
+            }
 
-        }
+
     }
 
 }
@@ -2534,11 +2566,13 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
                         lowest_T);
 
         }
-
         // Combine into overall similarity
         /// @todo Support weighting the modalities
         Mat total_similarity;
         addSimilarities(similarities, total_similarity);
+        //writeMat(similarities[0], "sim", 0);
+        //writeMat(similarities[1], "sim", 1);
+        //writeMat(total_similarity, "totsim", 0);
         Mat total_similarity_rgb;
         addSimilarities(similarities_rgb, total_similarity_rgb);
 
@@ -2564,11 +2598,13 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
 
                 int raw_score_combined = (raw_score + raw_score_rgb) / 2;
 
+
                 if (raw_score > raw_threshold) {
+
                     int offset = lowest_T / 2 + (lowest_T % 2 - 1);
                     int x = c * lowest_T + offset;
                     int y = r * lowest_T + offset;
-                    float score = (raw_score_combined * 100.f)
+                    float score = (raw_score * 100.f)
                             / (4 * num_features) + 0.5f;
                     float score_rgb;
 
@@ -2652,7 +2688,6 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
                     ushort* row_rgb = total_similarity_rgb.ptr < ushort > (r);
                     for (int c = 0; c < total_similarity.cols; ++c) {
                         int score = row[c];
-
                         int score_rgb = row_rgb[c] * modalities.size();
 
                         score = (score * 100.f) / (4 * num_features);
@@ -2661,13 +2696,15 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
                             score_rgb = (score_rgb * 100.f)
                                     / (16 * num_features) + 0.5f;
                         else
+                        {
                             score_rgb = (score_rgb * 100.f)
                                     / (16 * (num_features + num_color_features))
                                     + 0.5f;
 
-                        //int score_combined = (score + score_rgb) / 2;
+                        }
+                        int score_combined = (score + score_rgb) / 2;
                         //ricordati di cambiare il matchpredicate!!!!!!!!!!!!!!
-                        int score_combined = ((score/100) * 80) + ((score_rgb/100)*20);
+                        //int score_combined = ((score/100) * 80) + ((score_rgb/100)*20);
 
                         if (score_combined > best_score_combined) {
                             best_score_combined = score_combined;
@@ -2688,19 +2725,35 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
                 match.sim_combined = best_score_combined;
                 match.width = tp[start].width;
                 match.height = tp[start].height;
+
+
             }
 
             // Filter out any matches that drop below the similarity threshold
             std::vector<Match>::iterator new_end;
             std::vector<Match>::iterator new_end_rgb;
 
-            /*new_end = std::remove_if(candidates.begin(), candidates.end(),
+//            std::cout<<"prima"<<std::endl;
+//            for(int h = 0; h<candidates.size(); ++h)
+//            {
+//                std::cout<<"match.similarity: "<<candidates[h].similarity<<" - match.similarity_rgb: "<<candidates[h].similarity_rgb<<std::endl;
+//            }
+
+
+            new_end = std::remove_if(candidates.begin(), candidates.end(),
                     MatchPredicate(threshold));
             candidates.erase(new_end, candidates.end());
 
             new_end_rgb = std::remove_if(candidates.begin(), candidates.end(),
                     MatchPredicateRGB(threshold));
-            candidates.erase(new_end_rgb, candidates.end());*/
+            candidates.erase(new_end_rgb, candidates.end());
+
+//            std::cout<<"dopo"<<std::endl;
+//            for(int h = 0; h<candidates.size(); ++h)
+//            {
+//                std::cout<<"match.similarity: "<<candidates[h].similarity<<" - match.similarity_rgb: "<<candidates[h].similarity_rgb<<std::endl;
+//            }
+
 
         }
 
@@ -2924,12 +2977,10 @@ Ptr<Detector> getDefaultLINERGB(const bool color_features_enabled) {
 }
 
 Ptr<Detector> getDefaultLINEMODRGB(const bool color_features_enabled) {
-    std::cout << std::endl << std::endl
-            << "Still not implemented --- returned a defaultLINERGB detector"
-            << std::endl << std::endl << std::endl;
+
     std::vector < Ptr<Modality> > modalities;
     modalities.push_back(new ColorGradient);
-    //modalities.push_back(new DepthNormal);
+    modalities.push_back(new DepthNormal);
     return new Detector(modalities,
             std::vector<int>(T_DEFAULTS, T_DEFAULTS + 2),
             color_features_enabled);

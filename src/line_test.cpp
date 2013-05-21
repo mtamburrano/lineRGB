@@ -42,6 +42,7 @@ static void help_f() {
                     "\t --save    -- write a detector of the chosen modality using the templates just trained\n"
                     "\t --linergb -- specifies to use the LineRGB modality\n"
                     "\t --line2d  -- specifies to use the original Line2D modality\n\n"
+                    "\t --linemod -- specifies to use the LinemodRGB modality\n\n"
                     "Keys on test running:\n"
                     "\t w   -- write the detector on a file\n"
                     "\t p   -- pause the test\n"
@@ -127,9 +128,8 @@ int main(int argc, char * argv[]) {
     bool save = false;
     bool line2d = false;
     bool linergb = false;
+    bool linemodrgb = false;
     bool help = false;
-
-    int num_modalities = 1;
 
     string path_name = "";
     string path_templates = "";
@@ -170,6 +170,9 @@ int main(int argc, char * argv[]) {
         if (strcmp("--linergb", argv[h]) == 0) {
             linergb = true;
         }
+        if (strcmp("--linemodrgb", argv[h]) == 0) {
+            linemodrgb = true;
+        }
         if (strcmp("-h", argv[h]) == 0) {
             help = true;
         }
@@ -195,8 +198,10 @@ int main(int argc, char * argv[]) {
         printf("Test will be executed with Line2D\n");
     } else if (linergb == true) {
         printf("Test will be executed with LineRGB\n");
-    } else if (line2d == false && linergb == false) {
-        printf("Please specify one modality: \"--linergb\" or \"--line2d\"\n");
+    } else if (linemodrgb == true) {
+        printf("Test will be executed with LinemodRGB\n");
+    } else if (line2d == false && linergb == false && linemodrgb == false) {
+        printf("Please specify one modality: \"--linergb\" or \"--line2d\" or \"--linemodrgb\"\n");
         printf("use -h option to show help\n");
         return 0;
     }
@@ -252,10 +257,24 @@ int main(int argc, char * argv[]) {
 
     cv::Ptr < cv::line_rgb::Detector > detector_rgb;
     cv::Ptr < cv::linemod::Detector > detector_line2d;
+    cv::Ptr < cv::line_rgb::Detector > detector_linemodrgb;
+
+    int num_modalities = 0;
     if (linergb == true)
+    {
         detector_rgb = line_rgb::getDefaultLINERGB();
+        num_modalities = (int)detector_rgb->getModalities().size();
+    }
     if (line2d == true)
+    {
         detector_line2d = linemod::getDefaultLINE();
+        num_modalities = (int)detector_line2d->getModalities().size();
+    }
+    if (linemodrgb == true)
+    {
+        detector_linemodrgb = line_rgb::getDefaultLINEMODRGB();
+        num_modalities = (int)detector_linemodrgb->getModalities().size();
+    }
 
     if (train == true) {
         vector < string > list_files;
@@ -273,6 +292,8 @@ int main(int argc, char * argv[]) {
             filename = "./line_rgb_" + class_id + ".yml";
         if (line2d == true)
             filename = "./line_2d_" + class_id + ".yml";
+        if (linemodrgb == true)
+            filename = "./linemod_rgb_" + class_id + ".yml";
 
         for (int i = 0; i < size_files; i++) {
             stringstream out;
@@ -290,8 +311,24 @@ int main(int argc, char * argv[]) {
                 string depth_image = templates_folder
                         + getDepthFromMask(current_mask);
 
-                double resizes[6] = { 0.7, 0.8, 0.9, 1, 1.2, 1.4 };
-                double rotations[3] = { -22.5, 1.0, 22.5 };
+                std::cout<<template_image<<std::endl;
+
+                //double ress[6] = { 0.7, 0.8, 0.9, 1, 1.2, 1.4 };
+                //double rots[3] = { -22.5, 1.0, 22.5 };
+
+                vector<double> resizes;
+                vector<double> rotations;
+
+                //for(int init = 0; init <6; ++init)
+                  //      resizes.push_back(ress[init]);
+                //for(int init = 0; init <3; ++init)
+                  //      rotations.push_back(rots[init]);
+
+                for(int init = 0; init <1; ++init)
+                {
+                    resizes.push_back(1.0);
+                    rotations.push_back(1.0);
+                }
 
                 cv::Mat mask;
                 mask = cv::imread(mask_image, 0);
@@ -300,9 +337,10 @@ int main(int argc, char * argv[]) {
                     cv::Mat single_source;
                     single_source = cv::imread(template_image, 1);
                     cv::Mat single_sourceDepth;
-                    single_sourceDepth = cv::imread(depth_image, 1);
+                    single_sourceDepth = cv::imread(depth_image, CV_LOAD_IMAGE_ANYDEPTH | CV_LOAD_IMAGE_ANYCOLOR );
+                    single_sourceDepth.convertTo(single_sourceDepth, CV_16S);
 
-                    for (int iter = 0; iter < 6; iter++) {
+                    for (int iter = 0; iter < resizes.size(); iter++) {
                         double resize_factor = resizes[iter];
                         cv::Mat single_source_dst;
                         cv::Mat mask_dst;
@@ -326,7 +364,7 @@ int main(int argc, char * argv[]) {
                             }
                         }
 
-                        for (int iterRot = 0; iterRot < 3; iterRot++) {
+                        for (int iterRot = 0; iterRot < rotations.size(); iterRot++) {
                             double rotation_factor = rotations[iterRot];
                             cv::Mat single_source_final;
                             cv::Mat mask_final;
@@ -408,6 +446,13 @@ int main(int argc, char * argv[]) {
                                         sourcesTemplate, class_id, mask_final,
                                         &bb);
 
+                            if (linemodrgb == true)
+                            {
+                                template_id = detector_linemodrgb->addTemplate(
+                                        sourcesTemplate, class_id, mask_final,
+                                        &bb);
+                            }
+
                             single_train_timer.stop();
                             printf("Train single: %.2fs\n",
                                     single_train_timer.time());
@@ -435,6 +480,9 @@ int main(int argc, char * argv[]) {
             if (line2d == true)
                 writeLine2D(detector_line2d, filename);
             cout << endl << filename << " saved" << endl;
+            if (linemodrgb == true)
+                writeLineRGB(detector_linemodrgb, filename);
+            cout << endl << filename << " saved" << endl;
         }
         total_train_timer.stop();
         cout << "Whole train time: " << total_train_timer.time() << endl;
@@ -456,6 +504,8 @@ int main(int argc, char * argv[]) {
             filename = "./line_rgb_" + class_id + ".yml";
         if (line2d == true)
             filename = "./line_2d_" + class_id + ".yml";
+        if (linemodrgb == true)
+            filename = "./linemod_rgb_" + class_id + ".yml";
 
         cv::Mat color, depth;
         int num_classes = 1;
@@ -465,6 +515,8 @@ int main(int argc, char * argv[]) {
                 detector_rgb = readLineRGB(filename);
             if (line2d == true)
                 detector_line2d = readLine2D(filename);
+            if (linemodrgb == true)
+                detector_linemodrgb = readLineRGB(filename);
 
             cout << endl << filename << " saved" << endl;
         }
@@ -481,6 +533,12 @@ int main(int argc, char * argv[]) {
             num_classes = detector_line2d->numClasses();
             printf("\nLoaded %s with %d classes and %d templates\n", argv[1],
                     num_classes, detector_line2d->numTemplates());
+        }
+        if (linemodrgb == true) {
+            ids = detector_linemodrgb->classIds();
+            num_classes = detector_linemodrgb->numClasses();
+            printf("\nLoaded %s with %d classes and %d templates\n", argv[1],
+                    num_classes, detector_linemodrgb->numTemplates());
         }
 
         if (!ids.empty()) {
@@ -506,12 +564,14 @@ int main(int argc, char * argv[]) {
 
             color = cv::imread(roi_image, 1);
 
+
             if (color.data != NULL) {
                 vector < cv::Mat > sources;
                 sources.push_back(color);
 
                 if (num_modalities == 2) {
-                    depth = cv::imread(roi_depth_image, 1);
+                    depth = cv::imread(roi_depth_image, CV_LOAD_IMAGE_ANYDEPTH | CV_LOAD_IMAGE_ANYCOLOR );
+                    depth.convertTo(depth, CV_16S);
                     sources.push_back(depth);
                 }
 
@@ -600,6 +660,54 @@ int main(int argc, char * argv[]) {
                             drawResponseLine2D(templates, num_modalities,
                                     display, cv::Point(m.x, m.y),
                                     detector_line2d->getT(0), -1,
+                                    m.class_id.c_str());
+
+                        }
+
+                    }
+                    if (matches.empty())
+                        printf("No matches found...\n");
+
+                    printf(
+                            "\n------------------------------------------------------------\n");
+
+                    cv::imshow("Line2D", display);
+
+                }
+                else if (linemodrgb == true) {
+                    vector < cv::line_rgb::Match > matches;
+                    vector < std::string > class_ids;
+                    vector < cv::Mat > quantized_images;
+                    Timer match_timer;
+                    match_timer.start();
+                    detector_linemodrgb->match(sources, 80, matches, class_ids,
+                            quantized_images);
+                    match_timer.stop();
+                    printf("Matching: %.2fs\n", match_timer.time());
+                    int classes_visited = 0;
+                    std::set < std::string > visited;
+
+                    for (int i = 0;
+                            i < (int) matches.size()
+                                    && (classes_visited < num_classes); ++i) {
+                        cv::line_rgb::Match m = matches[i];
+
+                        if (visited.insert(m.class_id).second) {
+                            ++classes_visited;
+
+                            printf(
+                                    "Similarity combined: %5.1f%%; Similarity_2d: %5.1f%%; Similarity_rgb: %5.1f%%; x: %3d; y: %3d; class: %s; template: %3d",
+                                    m.sim_combined, m.similarity,
+                                    m.similarity_rgb, m.x, m.y,
+                                    m.class_id.c_str(), m.template_id);
+
+                            // Draw matching template
+                            const std::vector<cv::line_rgb::Template>& templates =
+                                    detector_linemodrgb->getTemplates(m.class_id,
+                                            m.template_id);
+                            drawResponseLineRGB(templates, num_modalities,
+                                    display, cv::Point(m.x, m.y),
+                                    detector_linemodrgb->getT(0), -1,
                                     m.class_id.c_str());
 
                         }
