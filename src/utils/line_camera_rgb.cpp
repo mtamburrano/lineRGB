@@ -35,6 +35,9 @@ void templateConvexHull(const std::vector<cv::linemod::Template>& templates,
 
 void drawResponse(const std::vector<cv::linemod::Template>& templates,
                   int num_modalities, cv::Mat& dst, cv::Point offset, int T);
+void drawResponseLineRGB(const std::vector<cv::line_rgb::Template>& templates,
+        int num_modalities, cv::Mat& dst, cv::Point offset, int T,
+        short rejected, std::string class_id);
 
 cv::Mat displayQuantized(const cv::Mat& quantized);
 
@@ -179,14 +182,60 @@ int main(int argc, char * argv[])
   Mouse::start("color");
 
   // Initialize LINEMOD data structures
-  cv::Ptr<cv::linemod::Detector> detector;
+  cv::Ptr<cv::linemod::Detector> detector_linemod;
+  cv::Ptr<cv::line_rgb::Detector> detector_linergb;
   std::string filename;
-  if (argc == 1)
+
+  bool line2d = false;
+  bool linemod = false;
+  bool linergb = false;
+  bool linemodrgb = false;
+  bool hsv = false;
+  bool rgb = false;
+
+  for (int h = 1; h <= (argc - 1); h++) {
+          if (strcmp("--line2d", argv[h]) == 0) {
+              line2d = true;
+          }
+          if (strcmp("--linemod", argv[h]) == 0) {
+              linemod = true;
+          }
+          if (strcmp("--linergb", argv[h]) == 0) {
+              linergb = true;
+          }
+          if (strcmp("--linemodrgb", argv[h]) == 0) {
+              linemodrgb = true;
+          }
+          if (strcmp("--hsv", argv[h]) == 0) {
+              hsv = true;
+          }
+          if (strcmp("--rgb", argv[h]) == 0) {
+              rgb = true;
+          }
+
+      }
+
+  if (linemod == true)
   {
     filename = "linemod_templates.yml";
-    detector = cv::linemod::getDefaultLINEMOD();
+    detector_linemod = cv::linemod::getDefaultLINEMOD();
   }
-  else
+  if (line2d == true)
+  {
+    filename = "line2d_templates.yml";
+    detector_linemod = cv::linemod::getDefaultLINE();
+  }
+  if (linemodrgb == true)
+  {
+    filename = "linemodrgb_templates.yml";
+    detector_linergb = cv::line_rgb::getDefaultLINEMODRGB(hsv);
+  }
+  if (linergb == true)
+  {
+    filename = "linergb_templates.yml";
+    detector_linergb = cv::line_rgb::getDefaultLINERGB(hsv);
+  }
+ /* else
   {
     detector = readLinemod(argv[1]);
 
@@ -199,8 +248,12 @@ int main(int argc, char * argv[])
       printf("Class ids:\n");
       std::copy(ids.begin(), ids.end(), std::ostream_iterator<std::string>(std::cout, "\n"));
     }
-  }
-  int num_modalities = (int)detector->getModalities().size();
+  }*/
+  int num_modalities;
+  if(linemod  == true || line2d == true)
+      num_modalities = (int)detector_linemod->getModalities().size();
+  if(linemodrgb  == true || linergb == true)
+      num_modalities = (int)detector_linergb->getModalities().size();
 
   // Open Kinect sensor
   cv::VideoCapture capture( CV_CAP_OPENNI );
@@ -253,12 +306,16 @@ int main(int argc, char * argv[])
         std::cout<<"color.size(): "<<color.size()<<std::endl;
         std::cout<<"depth.size(): "<<depth.size()<<" - depth.type(): "<<depth.type()<<"depth.elemSize(): "<<depth.elemSize()<<std::endl;
         //std::cout<< std::endl<< depth<<std::endl;
-        cv::waitKey();
+        //cv::waitKey();
         // Extract template
         std::string class_id = cv::format("class%d", num_classes);
         cv::Rect bb;
         extract_timer.start();
-        int template_id = detector->addTemplate(sources, class_id, mask, &bb);
+        int template_id;
+        if(linemod  == true || line2d == true)
+            template_id = detector_linemod->addTemplate(sources, class_id, mask, &bb);
+        if(linemodrgb  == true || linergb == true)
+            template_id = detector_linergb->addTemplate(sources, class_id, mask, &bb);
         extract_timer.stop();
         if (template_id != -1)
         {
@@ -276,66 +333,82 @@ int main(int argc, char * argv[])
     }
 
     // Perform matching
-    std::vector<cv::linemod::Match> matches;
+    std::vector<cv::linemod::Match> matches_linemod;
+    std::vector<cv::line_rgb::Match> matches_linergb;
     std::vector<cv::String> class_ids;
     std::vector<cv::Mat> quantized_images;
     match_timer.start();
-    detector->match(sources, (float)matching_threshold, matches, class_ids, quantized_images);
+    if(linemod  == true || line2d == true)
+        detector_linemod->match(sources, (float)matching_threshold, matches_linemod, class_ids, quantized_images);
+    if(linemodrgb  == true || linergb == true)
+        detector_linergb->match(sources, (float)matching_threshold, matches_linergb, class_ids, quantized_images);
+
     match_timer.stop();
 
     int classes_visited = 0;
     std::set<std::string> visited;
 
-    for (int i = 0; (i < (int)matches.size()) && (classes_visited < num_classes); ++i)
+    if(linemod  == true || line2d == true)
     {
-      cv::linemod::Match m = matches[i];
-
-      if (visited.insert(m.class_id).second)
-      {
-        ++classes_visited;
-
-        if (show_match_result)
+        for (int i = 0; (i < (int)matches_linemod.size()) && (classes_visited < num_classes); ++i)
         {
-          printf("Similarity: %5.1f%%; x: %3d; y: %3d; class: %s; template: %3d\n",
-                 m.similarity, m.x, m.y, m.class_id.c_str(), m.template_id);
-        }
+          cv::linemod::Match m = matches_linemod[i];
 
-        // Draw matching template
-        const std::vector<cv::linemod::Template>& templates = detector->getTemplates(m.class_id, m.template_id);
-        drawResponse(templates, num_modalities, display, cv::Point(m.x, m.y), detector->getT(0));
-
-        if (learn_online == true)
-        {
-          /// @todo Online learning possibly broken by new gradient feature extraction,
-          /// which assumes an accurate object outline.
-
-          // Compute masks based on convex hull of matched template
-          cv::Mat color_mask, depth_mask;
-          std::vector<CvPoint> chain = maskFromTemplate(templates, num_modalities,
-                                                        cv::Point(m.x, m.y), color.size(),
-                                                        color_mask, display);
-          subtractPlane(depth, depth_mask, chain, focal_length);
-
-          cv::imshow("mask", depth_mask);
-
-          // If pretty sure (but not TOO sure), add new template
-          if (learning_lower_bound < m.similarity && m.similarity < learning_upper_bound)
+          if (visited.insert(m.class_id).second)
           {
-            extract_timer.start();
-            int template_id = detector->addTemplate(sources, m.class_id, depth_mask);
-            extract_timer.stop();
-            if (template_id != -1)
+            ++classes_visited;
+
+            if (show_match_result)
             {
-              printf("*** Added template (id %d) for existing object class %s***\n",
-                     template_id, m.class_id.c_str());
+              printf("Similarity: %5.1f%%; x: %3d; y: %3d; class: %s; template: %3d\n",
+                     m.similarity, m.x, m.y, m.class_id.c_str(), m.template_id);
             }
+
+            // Draw matching template
+            const std::vector<cv::linemod::Template>& templates = detector_linemod->getTemplates(m.class_id, m.template_id);
+            drawResponse(templates, num_modalities, display, cv::Point(m.x, m.y), detector_linemod->getT(0));
+
           }
         }
-      }
     }
 
-    if (show_match_result && matches.empty())
-      printf("No matches found...\n");
+    if(linemodrgb  == true || linergb == true)
+    {
+        for (int i = 0; (i < (int)matches_linergb.size()) && (classes_visited < num_classes); ++i)
+        {
+          cv::line_rgb::Match m = matches_linergb[i];
+
+          if (visited.insert(m.class_id).second)
+          {
+            ++classes_visited;
+
+            if (show_match_result)
+            {
+              printf("Similarity: %5.1f%%; x: %3d; y: %3d; class: %s; template: %3d\n",
+                     m.similarity, m.x, m.y, m.class_id.c_str(), m.template_id);
+            }
+
+            // Draw matching template
+            const std::vector<cv::line_rgb::Template>& templates =
+                                                detector_linergb->getTemplates(m.class_id,
+                                                        m.template_id);
+                                        drawResponseLineRGB(templates, num_modalities,
+                                                display, cv::Point(m.x, m.y),
+                                                detector_linergb->getT(0), -1,
+                                                m.class_id.c_str());
+
+          }
+        }
+    }
+
+    if(linemod  == true || line2d == true)
+        if (show_match_result && matches_linemod.empty())
+              printf("No matches found...\n");
+    if(linemodrgb  == true || linergb == true)
+        if (show_match_result && matches_linergb.empty())
+              printf("No matches found...\n");
+
+
     if (show_timings)
     {
       printf("Training: %.2fs\n", extract_timer.time());
@@ -384,7 +457,7 @@ int main(int argc, char * argv[])
         break;
       case 'w':
         // write model to disk
-        writeLinemod(detector, filename);
+        writeLinemod(detector_linemod, filename);
         printf("Wrote detector and templates to %s\n", filename.c_str());
         break;
       default:
@@ -693,6 +766,86 @@ void templateConvexHull(const std::vector<cv::linemod::Template>& templates,
   const int hull_count = (int)hull.size();
   const cv::Point* hull_pts = &hull[0];
   cv::fillPoly(dst, &hull_pts, &hull_count, 1, cv::Scalar(255));
+}
+
+void drawResponseLineRGB(const std::vector<cv::line_rgb::Template>& templates,
+        int num_modalities, cv::Mat& dst, cv::Point offset, int T,
+        short rejected, std::string class_id) {
+
+    cv::Scalar colorT;
+    for (int m = 0; m < num_modalities; ++m) {
+
+        for (int i = 0; i < (int) templates[m].features.size(); ++i) {
+            cv::line_rgb::Feature f = templates[m].features[i];
+            cv::Point pt(f.x + offset.x, f.y + offset.y);
+            switch (f.rgb_label) {
+            case 0:
+                  colorT = CV_RGB(255, 0, 0);
+                  break;
+              case 1:
+                  colorT = CV_RGB(0, 255, 0);
+                  break;
+              case 2:
+                  colorT = CV_RGB(0, 0, 255);
+                  break;
+              case 3:
+                  colorT = CV_RGB(255, 255, 0);
+                  break;
+              case 4:
+                  colorT = CV_RGB(255, 0, 255);
+                  break;
+              case 5:
+                  colorT = CV_RGB(0, 255, 255);
+                  break;
+              case 6:
+                  colorT = CV_RGB(255, 255, 255);
+                  break;
+              case 7:
+                  colorT = CV_RGB(0, 0, 0);
+                  break;
+            }
+            if(m == 0)
+                cv::circle(dst, pt, T / 2, colorT);
+            if(m == 1)
+                cv::rectangle(dst,pt,cv::Point(pt.x+1, pt.y+1), CV_RGB(255, 255, 255));
+        }
+        for (int i = 0; i < (int) templates[m].color_features.size(); ++i) {
+            cv::line_rgb::Feature f = templates[m].color_features[i];
+            cv::Point pt(f.x + offset.x, f.y + offset.y);
+            switch (f.rgb_label) {
+            case 0:
+                  colorT = CV_RGB(255, 0, 0);
+                  break;
+              case 1:
+                  colorT = CV_RGB(0, 255, 0);
+                  break;
+              case 2:
+                  colorT = CV_RGB(0, 0, 255);
+                  break;
+              case 3:
+                  colorT = CV_RGB(255, 255, 0);
+                  break;
+              case 4:
+                  colorT = CV_RGB(255, 0, 255);
+                  break;
+              case 5:
+                  colorT = CV_RGB(0, 255, 255);
+                  break;
+              case 6:
+                  colorT = CV_RGB(255, 255, 255);
+                  break;
+              case 7:
+                  colorT = CV_RGB(0, 0, 0);
+                  break;
+            }
+
+            if(m == 0)
+                cv::circle(dst, pt, T / 2, colorT);
+            if(m == 1)
+                cv::rectangle(dst,pt,cv::Point(pt.x+1, pt.y+1), CV_RGB(255, 255, 255));
+        }
+
+    }
 }
 
 void drawResponse(const std::vector<cv::linemod::Template>& templates,

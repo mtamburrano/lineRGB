@@ -80,7 +80,7 @@ private:
 cv::Ptr<cv::line_rgb::Detector> readLineRGB(const std::string& filename);
 
 void writeLineRGB(const cv::Ptr<cv::line_rgb::Detector>& detector,
-        const std::string& filename);
+        const std::string& filename, bool use_hsv);
 
 static cv::Ptr<cv::linemod::Detector> readLine2D(const std::string& filename);
 
@@ -129,6 +129,8 @@ int main(int argc, char * argv[]) {
     bool line2d = false;
     bool linergb = false;
     bool linemodrgb = false;
+    bool hsv = false;
+    bool rgb = false;
     bool help = false;
 
     string path_name = "";
@@ -173,6 +175,12 @@ int main(int argc, char * argv[]) {
         if (strcmp("--linemodrgb", argv[h]) == 0) {
             linemodrgb = true;
         }
+        if (strcmp("--hsv", argv[h]) == 0) {
+            hsv = true;
+        }
+        if (strcmp("--rgb", argv[h]) == 0) {
+            rgb = true;
+        }
         if (strcmp("-h", argv[h]) == 0) {
             help = true;
         }
@@ -205,6 +213,18 @@ int main(int argc, char * argv[]) {
         printf("use -h option to show help\n");
         return 0;
     }
+
+    if(rgb == true && hsv == true)
+    {
+        printf("\"--rgb\" and \"--hsv\" options are exclusive. Please use only one of them\n");
+        return 0;
+    }
+    if(rgb == false && hsv == false)
+    {
+        printf("Please use one between \"--rgb\" and \"--hsv\" option\n");
+        return 0;
+    }
+
     if (train == true && load == true) {
         printf(
                 "\"--load\" option is enabled. Option \"--train\" will be ignored\n");
@@ -262,7 +282,7 @@ int main(int argc, char * argv[]) {
     int num_modalities = 0;
     if (linergb == true)
     {
-        detector_rgb = line_rgb::getDefaultLINERGB();
+        detector_rgb = line_rgb::getDefaultLINERGB(hsv);
         num_modalities = (int)detector_rgb->getModalities().size();
     }
     if (line2d == true)
@@ -272,7 +292,7 @@ int main(int argc, char * argv[]) {
     }
     if (linemodrgb == true)
     {
-        detector_linemodrgb = line_rgb::getDefaultLINEMODRGB();
+        detector_linemodrgb = line_rgb::getDefaultLINEMODRGB(hsv);
         num_modalities = (int)detector_linemodrgb->getModalities().size();
     }
 
@@ -476,12 +496,12 @@ int main(int argc, char * argv[]) {
         }
         if (save == true) {
             if (linergb == true)
-                writeLineRGB(detector_rgb, filename);
+                writeLineRGB(detector_rgb, filename, hsv);
             if (line2d == true)
                 writeLine2D(detector_line2d, filename);
             cout << endl << filename << " saved" << endl;
             if (linemodrgb == true)
-                writeLineRGB(detector_linemodrgb, filename);
+                writeLineRGB(detector_linemodrgb, filename, hsv);
             cout << endl << filename << " saved" << endl;
         }
         total_train_timer.stop();
@@ -731,7 +751,7 @@ int main(int argc, char * argv[]) {
                 case 'w':
                     // write model to disk
                     if (linergb == true)
-                        writeLineRGB(detector_rgb, filename);
+                        writeLineRGB(detector_rgb, filename, hsv);
                     if (line2d == true)
                         writeLine2D(detector_line2d, filename);
                     printf("Wrote detector and templates to %s\n",
@@ -794,8 +814,45 @@ void drawResponseLineRGB(const std::vector<cv::line_rgb::Template>& templates,
                   colorT = CV_RGB(0, 0, 0);
                   break;
             }
+            if(m == 0)
+                cv::circle(dst, pt, T / 2, colorT);
+            if(m == 1)
+                cv::rectangle(dst,pt,Point(pt.x+1, pt.y+1), CV_RGB(255, 255, 255));
+        }
+        for (int i = 0; i < (int) templates[m].color_features.size(); ++i) {
+            cv::line_rgb::Feature f = templates[m].color_features[i];
+            cv::Point pt(f.x + offset.x, f.y + offset.y);
+            switch (f.rgb_label) {
+            case 0:
+                  colorT = CV_RGB(255, 0, 0);
+                  break;
+              case 1:
+                  colorT = CV_RGB(0, 255, 0);
+                  break;
+              case 2:
+                  colorT = CV_RGB(0, 0, 255);
+                  break;
+              case 3:
+                  colorT = CV_RGB(255, 255, 0);
+                  break;
+              case 4:
+                  colorT = CV_RGB(255, 0, 255);
+                  break;
+              case 5:
+                  colorT = CV_RGB(0, 255, 255);
+                  break;
+              case 6:
+                  colorT = CV_RGB(255, 255, 255);
+                  break;
+              case 7:
+                  colorT = CV_RGB(0, 0, 0);
+                  break;
+            }
 
-            cv::circle(dst, pt, T / 2, colorT);
+            if(m == 0)
+                cv::circle(dst, pt, T / 2, colorT);
+            if(m == 1)
+                cv::rectangle(dst,pt,Point(pt.x+1, pt.y+1), CV_RGB(255, 255, 255));
         }
 
     }
@@ -834,9 +891,9 @@ cv::Ptr<cv::line_rgb::Detector> readLineRGB(const std::string& filename) {
 }
 
 void writeLineRGB(const cv::Ptr<cv::line_rgb::Detector>& detector,
-        const std::string& filename) {
+        const std::string& filename, bool use_hsv) {
     cv::FileStorage fs(filename, cv::FileStorage::WRITE);
-    detector->write(fs);
+    detector->write(fs, use_hsv);
 
     std::vector < std::string > ids = detector->classIds();
     fs << "classes" << "[";

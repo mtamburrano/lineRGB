@@ -69,6 +69,8 @@
 #include "emmintrin.h"
 #include <cstdio>
 #include <iostream>
+#include <fstream>
+#include <sstream>
 
 /****************************************************************************************\
 *                                 LINE-RGB		                                         *
@@ -233,12 +235,12 @@ public:
      * - "ColorGradient"
      * - "DepthNormal"
      */
-    static Ptr<Modality> create(const std::string& modality_type);
+    static Ptr<Modality> create(const std::string& modality_type, bool use_hsv);
 
     /**
      * \brief Load a modality from file.
      */
-    static Ptr<Modality> create(const FileNode& fn);
+    static Ptr<Modality> create(const FileNode& fn, bool use_hsv);
 
 protected:
     // Indirection is because process() has a default parameter.
@@ -257,6 +259,9 @@ public:
      */
     ColorGradient();
 
+    ColorGradient(bool use_HSV);
+
+
     /**
      * \brief Constructor.
      *
@@ -265,7 +270,7 @@ public:
      * \param strong_threshold Consider as candidate features only gradients whose norms are
      *                         larger than this.
      */
-    ColorGradient(float weak_threshold, size_t num_features, float strong_threshold, float threshold_rgb);
+    ColorGradient(float weak_threshold, size_t num_features, float strong_threshold, float threshold_rgb, bool use_HSV);
 
     virtual std::string name() const;
 
@@ -276,6 +281,7 @@ public:
     size_t num_features;
     float strong_threshold;
     float threshold_rgb;
+    bool use_HSV;
 
 protected:
     virtual Ptr<QuantizedPyramid> processImpl(const Mat& src,
@@ -463,7 +469,7 @@ public:
     std::vector<std::string> classIds() const;
 
     void read(const FileNode& fn);
-    void write(FileStorage& fs) const;
+    void write(FileStorage& fs, bool use_hsv) const;
 
     std::string readClass(const FileNode& fn, const std::string &class_id_override = "");
     void writeClass(const std::string& class_id, FileStorage& fs) const;
@@ -501,7 +507,7 @@ protected:
  *
  * Default parameter settings suitable for VGA images.
  */
-CV_EXPORTS Ptr<Detector> getDefaultLINERGB(const bool color_features_enabled =
+CV_EXPORTS Ptr<Detector> getDefaultLINERGB(bool use_HSV, const bool color_features_enabled =
         true);
 
 /**
@@ -511,7 +517,7 @@ CV_EXPORTS Ptr<Detector> getDefaultLINERGB(const bool color_features_enabled =
  * Default parameter settings suitable for VGA images.
  */
 CV_EXPORTS Ptr<Detector> getDefaultLINEMODRGB(
-        const bool color_features_enabled = true);
+        bool use_HSV, const bool color_features_enabled = true);
 
 } // namespace linemod
 } // namespace cv

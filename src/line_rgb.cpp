@@ -310,18 +310,18 @@ void QuantizedPyramid::selectScatteredFeatures(
     }
 }
 
-Ptr<Modality> Modality::create(const std::string& modality_type) {
+Ptr<Modality> Modality::create(const std::string& modality_type, bool use_hsv) {
     if (modality_type == "ColorGradient")
-        return new ColorGradient();
+        return new ColorGradient(use_hsv);
     else if (modality_type == "DepthNormal")
         return new DepthNormal();
     else
         return NULL;
 }
 
-Ptr<Modality> Modality::create(const FileNode& fn) {
+Ptr<Modality> Modality::create(const FileNode& fn, bool use_hsv) {
     std::string type = fn["type"];
-    Ptr < Modality > modality = create(type);
+    Ptr < Modality > modality = create(type, use_hsv);
     modality->read(fn);
     return modality;
 }
@@ -437,6 +437,45 @@ unsigned char get_RGB_quantization(const unsigned char* r_g_b,
 }
 
 /**
+ * \brief returns the quantization based on the diffs among values of hsv channels
+ * 00000001 = R = 1 (0-14; 165-179)
+ * 00000010 = G = 2 (45-74)
+ * 00000100 = B = 4 (105-134)
+ * 00001000 = RG = 8 (15-44)
+ * 00010000 = RB = 16 (135-164)
+ * 00100000 = GB = 32 (75-104)
+ * 01000000 = WHITE = 64 ( saturation < 51; value > 51)
+ * 10000000 = BLACK = 128 ( value < 51 )
+ *
+ * \param[in]  h_s_v       Array of the 3 values of HSV channels
+ *
+ * \return the color quantization computed.
+ * **/
+unsigned char get_HSV_quantization(const unsigned char& hue, const unsigned char saturation, const unsigned char value) {
+
+    if(value <= 51)
+        return 128; //black
+    if(saturation <= 51 && value > 127)
+        return 64; //white
+    if(saturation <= 51 && value <= 127)
+        return 128; //black
+    if(hue <= 14 || hue >= 165)
+        return 1; //red
+    if(hue <= 74 && hue >= 45)
+        return 2; //green
+    if(hue <= 134 && hue >= 105)
+        return 4; //blue
+    if(hue <= 44 && hue >= 15)
+        return 8; //yellow
+    if(hue <= 164 && hue >= 135)
+        return 16; //purple
+    if(hue <= 104 && hue >= 75)
+        return 32; //cyan
+
+    return 0;
+}
+
+/**
  * \brief Compute quantized orientation image from color image.
  *
  * Implements section 2.2 "Computing the Gradient Orientations."
@@ -453,12 +492,26 @@ unsigned char get_RGB_quantization(const unsigned char* r_g_b,
  * \param[out] magnitude_strong         Destination floating-point array of higher squared magnitudes.
  * 
  */
-void quantizedOrientations(const Mat& src, Mat& magnitude, Mat& angle, Mat& rgb,
-        float w_threshold, float s_threshold, float threshold_rgb,
+void quantizedOrientations(const Mat& src, Mat& magnitude, Mat& angle, Mat& color,
+        float w_threshold, float s_threshold, float threshold_rgb, bool hsv,
         bool compute_magnitude_strong, Mat& magnitude_strong) {
 
     magnitude.create(src.size(), CV_32F);
-    rgb.create(src.size(), CV_8UC1);
+    color.create(src.size(), CV_8UC1);
+    Mat hsv_src;
+    if(hsv == true)
+    {
+        cvtColor(src,hsv_src,CV_BGR2HSV);
+        imshow("hsv", hsv_src);
+        /*imshow("src", src);
+        waitKey();*/
+    }
+
+
+    if(hsv == true)
+        std::cout<<"HSV TRUE"<<std::endl;
+    else
+        std::cout<<"HSV FALSE"<<std::endl;
 
     //if we are quantizing the orientations and colors to the higher pyramid level, we initialize the mat to store higher magnitudes in the source for further analysis (signature)
     if (compute_magnitude_strong == true) {
@@ -492,8 +545,12 @@ void quantizedOrientations(const Mat& src, Mat& magnitude, Mat& angle, Mat& rgb,
     float * ptr0y = (float *) sobel_dy.data;
     float * ptrmg = (float *) magnitude.data;
 
-    uchar * ptrrgb = (uchar *) rgb.data;
-    uchar * ptrsrc = (uchar *) src.data;
+    uchar * ptr_color = (uchar *) color.data;
+    uchar * ptr_src;
+    if(hsv == false)
+        ptr_src= (uchar *) src.data;
+    else
+        ptr_src= (uchar *) hsv_src.data;
 
     const int length0 = sobel_3dy.cols * 3;
     const int length1 = static_cast<const int>(sobel_3dx.step1());
@@ -501,7 +558,7 @@ void quantizedOrientations(const Mat& src, Mat& magnitude, Mat& angle, Mat& rgb,
     const int length3 = static_cast<const int>(sobel_dx.step1());
     const int length4 = static_cast<const int>(sobel_dy.step1());
     const int length5 = static_cast<const int>(magnitude.step1());
-    const int length6 = static_cast<const int>(rgb.step1());
+    const int length6 = static_cast<const int>(color.step1());
     const int length7 = static_cast<const int>(src.step1());
 
     int max = 0;
@@ -533,18 +590,32 @@ void quantizedOrientations(const Mat& src, Mat& magnitude, Mat& angle, Mat& rgb,
 
             }
 
-            unsigned char red = ptrsrc[i + 2];
-            unsigned char green = ptrsrc[i + 1];
-            unsigned char blue = ptrsrc[i];
+            if(hsv == false)
+            {
+                unsigned char red = ptr_src[i + 2];
+                unsigned char green = ptr_src[i + 1];
+                unsigned char blue = ptr_src[i];
 
-            const unsigned char r_g_b[3] = { red, green, blue };
-            if (red >= green && red >= blue)
-                ptrrgb[ind] = get_RGB_quantization(r_g_b, 0, threshold_rgb);
-            else if (green >= red && green >= blue)
-                ptrrgb[ind] = get_RGB_quantization(r_g_b, 1, threshold_rgb);
+                const unsigned char r_g_b[3] = { red, green, blue };
+                if (red >= green && red >= blue)
+                    ptr_color[ind] = get_RGB_quantization(r_g_b, 0, threshold_rgb);
+                else if (green >= red && green >= blue)
+                    ptr_color[ind] = get_RGB_quantization(r_g_b, 1, threshold_rgb);
+                else
+                    ptr_color[ind] = get_RGB_quantization(r_g_b, 2, threshold_rgb);
+            }
             else
-                ptrrgb[ind] = get_RGB_quantization(r_g_b, 2, threshold_rgb);
+            {
+                unsigned char value = ptr_src[i + 2];
+                unsigned char saturation = ptr_src[i + 1];
+                unsigned char hue = ptr_src[i];
 
+                //std::cout<<"hue: "<<(int)hue<<" - sat: "<<(int)saturation<<" - value: "<<(int)value<<std::endl;
+
+                ptr_color[ind] = get_HSV_quantization(hue, saturation, value);
+
+
+            }
             ++ind;
         }
         ptrx += length1;
@@ -552,8 +623,8 @@ void quantizedOrientations(const Mat& src, Mat& magnitude, Mat& angle, Mat& rgb,
         ptr0x += length3;
         ptr0y += length4;
         ptrmg += length5;
-        ptrrgb += length6;
-        ptrsrc += length7;
+        ptr_color += length6;
+        ptr_src += length7;
     }
 
     // Calculate the final gradient orientations
@@ -649,7 +720,7 @@ void hysteresisGradient(Mat& magnitude, Mat& quantized_angle, Mat& angle,
 class ColorGradientPyramid: public QuantizedPyramid {
 public:
     ColorGradientPyramid(const Mat& src, const Mat& mask, float weak_threshold,
-            size_t num_features, float strong_threshold, float threshold_rgb);
+            size_t num_features, float strong_threshold, float threshold_rgb, bool use_HSV);
 
     virtual void quantize(Mat& dst) const;
 
@@ -661,6 +732,7 @@ public:
 
     Mat magnitude_strong;
     Mat magnitude;
+    bool use_HSV;
 protected:
     /// Recalculate angle and magnitude images
     void update(bool compute_magnitude_strong);
@@ -668,7 +740,8 @@ protected:
     Mat src;
     Mat mask;
     Mat angle;
-    Mat rgb;
+
+    Mat color;
 
     int pyramid_level;
 
@@ -680,16 +753,16 @@ protected:
 
 ColorGradientPyramid::ColorGradientPyramid(const Mat& src, const Mat& mask,
         float weak_threshold, size_t num_features, float strong_threshold,
-        float threshold_rgb) :
+        float threshold_rgb, bool use_HSV) :
         src(src), mask(mask), pyramid_level(0), weak_threshold(weak_threshold), num_features(
                 num_features), strong_threshold(strong_threshold), threshold_rgb(
-                threshold_rgb) {
+                threshold_rgb), use_HSV(use_HSV) {
     update(true);
 }
 
 void ColorGradientPyramid::update(bool compute_magnitude_strong) {
-    quantizedOrientations(src, magnitude, angle, rgb, weak_threshold,
-            strong_threshold, threshold_rgb, compute_magnitude_strong,
+    quantizedOrientations(src, magnitude, angle, color, weak_threshold,
+            strong_threshold, threshold_rgb, use_HSV, compute_magnitude_strong,
             magnitude_strong);
 }
 
@@ -719,8 +792,8 @@ void ColorGradientPyramid::quantize(Mat& dst) const {
 }
 
 void ColorGradientPyramid::quantizeRGB(Mat& dst) const {
-    dst = Mat::zeros(rgb.size(), CV_8UC1);
-    rgb.copyTo(dst, mask);
+    dst = Mat::zeros(color.size(), CV_8UC1);
+    color.copyTo(dst, mask);
 }
 
 //count neighbor's rgb values and check how many oh them are inside the mask
@@ -912,7 +985,7 @@ bool ColorGradientPyramid::extractTemplate(Template& templ) const {
 
     for (int r = 0; r < magnitude.rows; ++r) {
         const uchar* angle_r = angle.ptr < uchar > (r);
-        const uchar* rgb_r = rgb.ptr < uchar > (r);
+        const uchar* rgb_r = color.ptr < uchar > (r);
 
         const float* magnitude_r = magnitude.ptr<float>(r);
         const uchar* mask_r = no_mask ? NULL : local_mask.ptr < uchar > (r);
@@ -944,7 +1017,7 @@ bool ColorGradientPyramid::extractTemplate(Template& templ) const {
                         if (border_mask_r[c]) {
                             //Voting color neighbors
                             uchar voted = votesRgbMag(c, r, score, quantized,
-                                    rgb, magnitude, mask, central_mass);
+                                    color, magnitude, mask, central_mass);
 
                             candidates.push_back(
                                     Candidate(c, r, getLabel(quantized),
@@ -993,13 +1066,18 @@ bool ColorGradientPyramid::extractTemplate(Template& templ) const {
 
 ColorGradient::ColorGradient() :
         weak_threshold(50.0f), num_features(63), strong_threshold(70.0f), threshold_rgb(
-                65) {
+                65), use_HSV(false) {
+}
+
+ColorGradient::ColorGradient(bool use_HSV) :
+        weak_threshold(50.0f), num_features(63), strong_threshold(70.0f), threshold_rgb(
+                        65), use_HSV(use_HSV) {
 }
 
 ColorGradient::ColorGradient(float weak_threshold, size_t num_features,
-        float strong_threshold, float threshold_rgb) :
+        float strong_threshold, float threshold_rgb, bool use_HSV) :
         weak_threshold(weak_threshold), num_features(num_features), strong_threshold(
-                strong_threshold), threshold_rgb(threshold_rgb) {
+                strong_threshold), threshold_rgb(threshold_rgb), use_HSV(use_HSV) {
 }
 
 static const char CG_NAME[] = "ColorGradient";
@@ -1011,7 +1089,7 @@ std::string ColorGradient::name() const {
 Ptr<QuantizedPyramid> ColorGradient::processImpl(const Mat& src,
         const Mat& mask) const {
     return new ColorGradientPyramid(src, mask, weak_threshold, num_features,
-            strong_threshold, threshold_rgb);
+            strong_threshold, threshold_rgb, use_HSV);
 }
 
 void ColorGradient::read(const FileNode& fn) {
@@ -1430,108 +1508,143 @@ void spread(const Mat& src, Mat& dst, int T) {
 // Auto-generated by create_similarity_lut.py
 CV_DECL_ALIGNED(16) static const unsigned char SIMILARITY_LUT[256] = {0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4, 0, 0, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 0, 3, 4, 4, 3, 3, 4, 4, 2, 3, 4, 4, 3, 3, 4, 4, 0, 1, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 0, 2, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 0, 2, 1, 2, 0, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 0, 1, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 0, 3, 2, 3, 1, 3, 2, 3, 0, 3, 2, 3, 1, 3, 2, 3, 0, 0, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4, 0, 1, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 0, 3, 4, 4, 3, 3, 4, 4, 2, 3, 4, 4, 3, 3, 4, 4, 0, 2, 1, 2, 0, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 0, 2, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 0, 3, 2, 3, 1, 3, 2, 3, 0, 3, 2, 3, 1, 3, 2, 3, 0, 1, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4};
 
-static const unsigned char SIMILARITY_RGB_LUT[8][256] = { { 0, 16, 0, 16, 0, 16,
-        0, 16, 2, 16, 2, 16, 2, 16, 2, 16, 2, 16, 2, 16, 2, 16, 2, 16, 2, 16, 2,
-        16, 2, 16, 2, 16, 0, 16, 0, 16, 0, 16, 0, 16, 2, 16, 2, 16, 2, 16, 2,
-        16, 2, 16, 2, 16, 2, 16, 2, 16, 2, 16, 2, 16, 2, 16, 2, 16, 1, 16, 1,
-        16, 1, 16, 1, 16, 2, 16, 2, 16, 2, 16, 2, 16, 2, 16, 2, 16, 2, 16, 2,
-        16, 2, 16, 2, 16, 2, 16, 2, 16, 1, 16, 1, 16, 1, 16, 1, 16, 2, 16, 2,
-        16, 2, 16, 2, 16, 2, 16, 2, 16, 2, 16, 2, 16, 2, 16, 2, 16, 2, 16, 2,
-        16, 1, 16, 1, 16, 1, 16, 1, 16, 2, 16, 2, 16, 2, 16, 2, 16, 2, 16, 2,
-        16, 2, 16, 2, 16, 2, 16, 2, 16, 2, 16, 2, 16, 1, 16, 1, 16, 1, 16, 1,
-        16, 2, 16, 2, 16, 2, 16, 2, 16, 2, 16, 2, 16, 2, 16, 2, 16, 2, 16, 2,
-        16, 2, 16, 2, 16, 1, 16, 1, 16, 1, 16, 1, 16, 2, 16, 2, 16, 2, 16, 2,
-        16, 2, 16, 2, 16, 2, 16, 2, 16, 2, 16, 2, 16, 2, 16, 2, 16, 1, 16, 1,
-        16, 1, 16, 1, 16, 2, 16, 2, 16, 2, 16, 2, 16, 2, 16, 2, 16, 2, 16, 2,
-        16, 2, 16, 2, 16, 2, 16, 2, 16 }, { 0, 0, 16, 16, 0, 0, 16, 16, 2, 2,
-        16, 16, 2, 2, 16, 16, 0, 0, 16, 16, 0, 0, 16, 16, 2, 2, 16, 16, 2, 2,
-        16, 16, 2, 2, 16, 16, 2, 2, 16, 16, 2, 2, 16, 16, 2, 2, 16, 16, 2, 2,
-        16, 16, 2, 2, 16, 16, 2, 2, 16, 16, 2, 2, 16, 16, 1, 1, 16, 16, 1, 1,
-        16, 16, 2, 2, 16, 16, 2, 2, 16, 16, 1, 1, 16, 16, 1, 1, 16, 16, 2, 2,
-        16, 16, 2, 2, 16, 16, 2, 2, 16, 16, 2, 2, 16, 16, 2, 2, 16, 16, 2, 2,
-        16, 16, 2, 2, 16, 16, 2, 2, 16, 16, 2, 2, 16, 16, 2, 2, 16, 16, 1, 1,
-        16, 16, 1, 1, 16, 16, 2, 2, 16, 16, 2, 2, 16, 16, 1, 1, 16, 16, 1, 1,
-        16, 16, 2, 2, 16, 16, 2, 2, 16, 16, 2, 2, 16, 16, 2, 2, 16, 16, 2, 2,
-        16, 16, 2, 2, 16, 16, 2, 2, 16, 16, 2, 2, 16, 16, 2, 2, 16, 16, 2, 2,
-        16, 16, 1, 1, 16, 16, 1, 1, 16, 16, 2, 2, 16, 16, 2, 2, 16, 16, 1, 1,
-        16, 16, 1, 1, 16, 16, 2, 2, 16, 16, 2, 2, 16, 16, 2, 2, 16, 16, 2, 2,
-        16, 16, 2, 2, 16, 16, 2, 2, 16, 16, 2, 2, 16, 16, 2, 2, 16, 16, 2, 2,
-        16, 16, 2, 2, 16, 16 }, { 0, 0, 0, 0, 16, 16, 16, 16, 0, 0, 0, 0, 16,
-        16, 16, 16, 2, 2, 2, 2, 16, 16, 16, 16, 2, 2, 2, 2, 16, 16, 16, 16, 2,
-        2, 2, 2, 16, 16, 16, 16, 2, 2, 2, 2, 16, 16, 16, 16, 2, 2, 2, 2, 16, 16,
-        16, 16, 2, 2, 2, 2, 16, 16, 16, 16, 1, 1, 1, 1, 16, 16, 16, 16, 1, 1, 1,
-        1, 16, 16, 16, 16, 2, 2, 2, 2, 16, 16, 16, 16, 2, 2, 2, 2, 16, 16, 16,
-        16, 2, 2, 2, 2, 16, 16, 16, 16, 2, 2, 2, 2, 16, 16, 16, 16, 2, 2, 2, 2,
-        16, 16, 16, 16, 2, 2, 2, 2, 16, 16, 16, 16, 1, 1, 1, 1, 16, 16, 16, 16,
-        1, 1, 1, 1, 16, 16, 16, 16, 2, 2, 2, 2, 16, 16, 16, 16, 2, 2, 2, 2, 16,
-        16, 16, 16, 2, 2, 2, 2, 16, 16, 16, 16, 2, 2, 2, 2, 16, 16, 16, 16, 2,
-        2, 2, 2, 16, 16, 16, 16, 2, 2, 2, 2, 16, 16, 16, 16, 1, 1, 1, 1, 16, 16,
-        16, 16, 1, 1, 1, 1, 16, 16, 16, 16, 2, 2, 2, 2, 16, 16, 16, 16, 2, 2, 2,
-        2, 16, 16, 16, 16, 2, 2, 2, 2, 16, 16, 16, 16, 2, 2, 2, 2, 16, 16, 16,
-        16, 2, 2, 2, 2, 16, 16, 16, 16, 2, 2, 2, 2, 16, 16, 16, 16 }, { 0, 2, 2,
-        2, 0, 2, 2, 2, 16, 16, 16, 16, 16, 16, 16, 16, 2, 2, 2, 2, 2, 2, 2, 2,
-        16, 16, 16, 16, 16, 16, 16, 16, 2, 2, 2, 2, 2, 2, 2, 2, 16, 16, 16, 16,
-        16, 16, 16, 16, 2, 2, 2, 2, 2, 2, 2, 2, 16, 16, 16, 16, 16, 16, 16, 16,
-        2, 2, 2, 2, 2, 2, 2, 2, 16, 16, 16, 16, 16, 16, 16, 16, 2, 2, 2, 2, 2,
-        2, 2, 2, 16, 16, 16, 16, 16, 16, 16, 16, 2, 2, 2, 2, 2, 2, 2, 2, 16, 16,
-        16, 16, 16, 16, 16, 16, 2, 2, 2, 2, 2, 2, 2, 2, 16, 16, 16, 16, 16, 16,
-        16, 16, 2, 2, 2, 2, 2, 2, 2, 2, 16, 16, 16, 16, 16, 16, 16, 16, 2, 2, 2,
-        2, 2, 2, 2, 2, 16, 16, 16, 16, 16, 16, 16, 16, 2, 2, 2, 2, 2, 2, 2, 2,
-        16, 16, 16, 16, 16, 16, 16, 16, 2, 2, 2, 2, 2, 2, 2, 2, 16, 16, 16, 16,
-        16, 16, 16, 16, 2, 2, 2, 2, 2, 2, 2, 2, 16, 16, 16, 16, 16, 16, 16, 16,
-        2, 2, 2, 2, 2, 2, 2, 2, 16, 16, 16, 16, 16, 16, 16, 16, 2, 2, 2, 2, 2,
-        2, 2, 2, 16, 16, 16, 16, 16, 16, 16, 16, 2, 2, 2, 2, 2, 2, 2, 2, 16, 16,
-        16, 16, 16, 16, 16, 16 }, { 0, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-        2, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 2, 2,
-        2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 16, 16, 16, 16, 16, 16, 16,
-        16, 16, 16, 16, 16, 16, 16, 16, 16, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-        2, 2, 2, 2, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
-        16, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 16, 16, 16, 16, 16,
-        16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-        2, 2, 2, 2, 2, 2, 2, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
-        16, 16, 16, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 16, 16, 16,
-        16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 2, 2, 2, 2, 2, 2, 2,
-        2, 2, 2, 2, 2, 2, 2, 2, 2, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
-        16, 16, 16, 16, 16, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 16,
-        16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16 }, { 0, 0, 2,
+static const unsigned char SIMILARITY_RGB_LUT[8][256] = { { 0, 15, 0, 15, 0, 15,
+        0, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2,
+        15, 2, 15, 2, 15, 0, 15, 0, 15, 0, 15, 0, 15, 2, 15, 2, 15, 2, 15, 2,
+        15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 15, 1, 15, 1,
+        15, 1, 15, 1, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2,
+        15, 2, 15, 2, 15, 2, 15, 2, 15, 1, 15, 1, 15, 1, 15, 1, 15, 2, 15, 2,
+        15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2,
+        15, 1, 15, 1, 15, 1, 15, 1, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2,
+        15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 15, 1, 15, 1, 15, 1, 15, 1,
+        15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2,
+        15, 2, 15, 2, 15, 1, 15, 1, 15, 1, 15, 1, 15, 2, 15, 2, 15, 2, 15, 2,
+        15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 15, 1, 15, 1,
+        15, 1, 15, 1, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2,
+        15, 2, 15, 2, 15, 2, 15, 2, 15 }, { 0, 0, 15, 15, 0, 0, 15, 15, 2, 2,
+        15, 15, 2, 2, 15, 15, 0, 0, 15, 15, 0, 0, 15, 15, 2, 2, 15, 15, 2, 2,
+        15, 15, 2, 2, 15, 15, 2, 2, 15, 15, 2, 2, 15, 15, 2, 2, 15, 15, 2, 2,
+        15, 15, 2, 2, 15, 15, 2, 2, 15, 15, 2, 2, 15, 15, 1, 1, 15, 15, 1, 1,
+        15, 15, 2, 2, 15, 15, 2, 2, 15, 15, 1, 1, 15, 15, 1, 1, 15, 15, 2, 2,
+        15, 15, 2, 2, 15, 15, 2, 2, 15, 15, 2, 2, 15, 15, 2, 2, 15, 15, 2, 2,
+        15, 15, 2, 2, 15, 15, 2, 2, 15, 15, 2, 2, 15, 15, 2, 2, 15, 15, 1, 1,
+        15, 15, 1, 1, 15, 15, 2, 2, 15, 15, 2, 2, 15, 15, 1, 1, 15, 15, 1, 1,
+        15, 15, 2, 2, 15, 15, 2, 2, 15, 15, 2, 2, 15, 15, 2, 2, 15, 15, 2, 2,
+        15, 15, 2, 2, 15, 15, 2, 2, 15, 15, 2, 2, 15, 15, 2, 2, 15, 15, 2, 2,
+        15, 15, 1, 1, 15, 15, 1, 1, 15, 15, 2, 2, 15, 15, 2, 2, 15, 15, 1, 1,
+        15, 15, 1, 1, 15, 15, 2, 2, 15, 15, 2, 2, 15, 15, 2, 2, 15, 15, 2, 2,
+        15, 15, 2, 2, 15, 15, 2, 2, 15, 15, 2, 2, 15, 15, 2, 2, 15, 15, 2, 2,
+        15, 15, 2, 2, 15, 15 }, { 0, 0, 0, 0, 15, 15, 15, 15, 0, 0, 0, 0, 15,
+        15, 15, 15, 2, 2, 2, 2, 15, 15, 15, 15, 2, 2, 2, 2, 15, 15, 15, 15, 2,
+        2, 2, 2, 15, 15, 15, 15, 2, 2, 2, 2, 15, 15, 15, 15, 2, 2, 2, 2, 15, 15,
+        15, 15, 2, 2, 2, 2, 15, 15, 15, 15, 1, 1, 1, 1, 15, 15, 15, 15, 1, 1, 1,
+        1, 15, 15, 15, 15, 2, 2, 2, 2, 15, 15, 15, 15, 2, 2, 2, 2, 15, 15, 15,
+        15, 2, 2, 2, 2, 15, 15, 15, 15, 2, 2, 2, 2, 15, 15, 15, 15, 2, 2, 2, 2,
+        15, 15, 15, 15, 2, 2, 2, 2, 15, 15, 15, 15, 1, 1, 1, 1, 15, 15, 15, 15,
+        1, 1, 1, 1, 15, 15, 15, 15, 2, 2, 2, 2, 15, 15, 15, 15, 2, 2, 2, 2, 15,
+        15, 15, 15, 2, 2, 2, 2, 15, 15, 15, 15, 2, 2, 2, 2, 15, 15, 15, 15, 2,
+        2, 2, 2, 15, 15, 15, 15, 2, 2, 2, 2, 15, 15, 15, 15, 1, 1, 1, 1, 15, 15,
+        15, 15, 1, 1, 1, 1, 15, 15, 15, 15, 2, 2, 2, 2, 15, 15, 15, 15, 2, 2, 2,
+        2, 15, 15, 15, 15, 2, 2, 2, 2, 15, 15, 15, 15, 2, 2, 2, 2, 15, 15, 15,
+        15, 2, 2, 2, 2, 15, 15, 15, 15, 2, 2, 2, 2, 15, 15, 15, 15 }, { 0, 2, 2,
+        2, 0, 2, 2, 2, 15, 15, 15, 15, 15, 15, 15, 15, 2, 2, 2, 2, 2, 2, 2, 2,
+        15, 15, 15, 15, 15, 15, 15, 15, 2, 2, 2, 2, 2, 2, 2, 2, 15, 15, 15, 15,
+        15, 15, 15, 15, 2, 2, 2, 2, 2, 2, 2, 2, 15, 15, 15, 15, 15, 15, 15, 15,
+        2, 2, 2, 2, 2, 2, 2, 2, 15, 15, 15, 15, 15, 15, 15, 15, 2, 2, 2, 2, 2,
+        2, 2, 2, 15, 15, 15, 15, 15, 15, 15, 15, 2, 2, 2, 2, 2, 2, 2, 2, 15, 15,
+        15, 15, 15, 15, 15, 15, 2, 2, 2, 2, 2, 2, 2, 2, 15, 15, 15, 15, 15, 15,
+        15, 15, 2, 2, 2, 2, 2, 2, 2, 2, 15, 15, 15, 15, 15, 15, 15, 15, 2, 2, 2,
+        2, 2, 2, 2, 2, 15, 15, 15, 15, 15, 15, 15, 15, 2, 2, 2, 2, 2, 2, 2, 2,
+        15, 15, 15, 15, 15, 15, 15, 15, 2, 2, 2, 2, 2, 2, 2, 2, 15, 15, 15, 15,
+        15, 15, 15, 15, 2, 2, 2, 2, 2, 2, 2, 2, 15, 15, 15, 15, 15, 15, 15, 15,
+        2, 2, 2, 2, 2, 2, 2, 2, 15, 15, 15, 15, 15, 15, 15, 15, 2, 2, 2, 2, 2,
+        2, 2, 2, 15, 15, 15, 15, 15, 15, 15, 15, 2, 2, 2, 2, 2, 2, 2, 2, 15, 15,
+        15, 15, 15, 15, 15, 15 }, { 0, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+        2, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 2, 2,
+        2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 15, 15, 15, 15, 15, 15, 15,
+        15, 15, 15, 15, 15, 15, 15, 15, 15, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+        2, 2, 2, 2, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+        15, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 15, 15, 15, 15, 15,
+        15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+        2, 2, 2, 2, 2, 2, 2, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+        15, 15, 15, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 15, 15, 15,
+        15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 2, 2, 2, 2, 2, 2, 2,
+        2, 2, 2, 2, 2, 2, 2, 2, 2, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+        15, 15, 15, 15, 15, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 15,
+        15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15 }, { 0, 0, 2,
         2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-        2, 2, 2, 2, 2, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
-        16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
+        2, 2, 2, 2, 2, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+        15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
         2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-        2, 2, 2, 2, 2, 2, 2, 2, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
-        16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
-        16, 16, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-        2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
-        16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
-        16, 16, 16, 16, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-        2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 16, 16, 16, 16, 16, 16, 16, 16,
-        16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
-        16, 16, 16, 16, 16, 16 }, { 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        2, 2, 2, 2, 2, 2, 2, 2, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+        15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+        15, 15, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+        2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+        15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+        15, 15, 15, 15, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+        2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 15, 15, 15, 15, 15, 15, 15, 15,
+        15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+        15, 15, 15, 15, 15, 15 }, { 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-        1, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
-        16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
-        16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
-        16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+        15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+        15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+        15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 0, 1, 1, 1, 1, 1, 1, 1, 1,
         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-        1, 1, 1, 1, 1, 1, 1, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
-        16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
-        16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
-        16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16 }, { 0, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+        15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+        15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+        15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15 }, { 0, 1, 1,
         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-        1, 1, 1, 1, 1, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
-        16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
-        16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
-        16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
-        16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
-        16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
-        16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
-        16, 16, 16, 16, 16, 16 } };
+        1, 1, 1, 1, 1, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+        15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+        15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+        15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+        15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+        15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+        15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+        15, 15, 15, 15, 15, 15 } };
+
+static unsigned char SIMILARITY_HSV_LUT[8][256];
+
+void import_similarity_csv()
+{
+    //ifstream in("tabella_senza_margini_main.csv");
+
+    std::ifstream in("./similarity_HSV.csv");
+
+    if(in == NULL)
+    {
+       std::cout<<"similarity lut not found"<<std::endl;
+       CV_Assert(false);
+    }
+    string line, field;
+
+    int r = 0, c = 0;
+    while ( getline(in,line) )    // get next line in file
+    {
+        c = 0;
+        std::stringstream ss(line);
+
+        while (getline(ss,field,','))  // break line into comma delimitted fields
+        {
+            int number;
+
+            ss << field;
+            ss >> number;
+            SIMILARITY_HSV_LUT[r][c] = (uchar)number;  // add each field to the 1D array
+            c++;
+        }
+        r++;
+    }
+}
+
 /**
  * \brief Precompute response maps for a spread quantized image.
  *
@@ -1602,6 +1715,31 @@ void computeResponseMapsRGB(const Mat& src, std::vector<Mat>& response_maps) {
             for (int ori = 0; ori < 8; ori++) {
                 response_maps[ori].at < uchar > (r, c) =
                         SIMILARITY_RGB_LUT[ori][(int) src_r[c]];
+
+            }
+
+        }
+
+    }
+
+
+}
+void computeResponseMapsHSV(const Mat& src, std::vector<Mat>& response_maps) {
+
+    // Allocate response maps
+    response_maps.resize(8);
+    for (int i = 0; i < 8; ++i)
+        response_maps[i].create(src.size(), CV_8UC1);
+
+    int ind = 0;
+    for (int r = 0; r < src.rows; ++r) {
+        const uchar* src_r = src.ptr(r);
+
+        for (int c = 0; c < src.cols; ++c) {
+
+            for (int ori = 0; ori < 8; ori++) {
+                response_maps[ori].at < uchar > (r, c) =
+                        SIMILARITY_HSV_LUT[ori][(int) src_r[c]];
 
             }
 
@@ -2306,7 +2444,8 @@ struct MatchPredicate {
             threshold(threshold) {
     }
     bool operator()(const Match& m) {
-        return m.similarity < threshold;
+        //return m.similarity < threshold;
+       return m.similarity < 85;
     }
     float threshold;
 };
@@ -2373,6 +2512,10 @@ void Detector::match(const std::vector<Mat>& sources, float threshold,
 
     // For each pyramid level, precompute linear memories for each modality
     std::vector < Size > sizes;
+
+    QuantizedPyramid * tmpQp = quantizers[0];
+    ColorGradientPyramid * cgp = dynamic_cast<ColorGradientPyramid *>(tmpQp);
+
     for (int l = 0; l < pyramid_levels; ++l) {
         int T = T_at_level[l];
         std::vector < LinearMemories > &lm_level = lm_pyramid[l];
@@ -2399,7 +2542,18 @@ void Detector::match(const std::vector<Mat>& sources, float threshold,
 
             computeResponseMaps(spread_quantized, response_maps);
             if(i == 0) //first modality
-                computeResponseMapsRGB(spread_quantized_rgb, response_maps_rgb);
+            {
+                if(cgp->use_HSV == false)
+                {
+                    computeResponseMapsRGB(spread_quantized_rgb, response_maps_rgb);
+                    std::cout<<"VA QUI? "<<std::endl;
+                }
+                else
+                {
+                    computeResponseMapsHSV(spread_quantized_rgb, response_maps_rgb);
+                    std::cout<<"SI CI VAA"<<std::endl;
+                }
+            }
 
             LinearMemories& memories = lm_level[i];
             LinearMemories& memories_rgb = lm_level_rgb[i];
@@ -2437,8 +2591,8 @@ void Detector::match(const std::vector<Mat>& sources, float threshold,
         }
     }
 
-    QuantizedPyramid * tmpQp = quantizers[0];
-    ColorGradientPyramid * cgp = dynamic_cast<ColorGradientPyramid *>(tmpQp);
+//    QuantizedPyramid * tmpQp = quantizers[0];
+//    ColorGradientPyramid * cgp = dynamic_cast<ColorGradientPyramid *>(tmpQp);
 
     // Sort matches by similarity, and prune any duplicates introduced by pyramid refinement
     std::sort(matches.begin(), matches.end());
@@ -2582,8 +2736,8 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
         // NOTE: This assumes max per-feature response is 4, so we scale between [2*nf, 4*nf].
         int raw_threshold = static_cast<int>(2 * num_features
                 + (threshold / 100.f) * (2 * num_features) + 0.5f);
-        int raw_threshold_rgb = static_cast<int>(8 * num_features
-                + (threshold / 100.f) * (8 * num_features) + 0.5f);
+        int raw_threshold_rgb = static_cast<int>(7.5 * num_features
+                + (threshold / 100.f) * (7.5 * num_features) + 0.5f);
 
         // Find initial matches
         std::vector < Match > candidates;
@@ -2610,10 +2764,10 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
 
                     if (color_features_enabled == false)
                         score_rgb = (raw_score_rgb * 100.f)
-                                / (16 * num_features) + 0.5f;
+                                / (15 * num_features) + 0.5f;
                     else
                         score_rgb = (raw_score_rgb * 100.f)
-                                / (16 * (num_features + num_color_features))
+                                / (15 * (num_features + num_color_features))
                                 + 0.5f;
 
                     candidates.push_back(
@@ -2674,6 +2828,8 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
                                 Point(x, y));
 
                 }
+                if(modalities.size() == 2)
+                    num_color_features  *= 2;
 
                 addSimilarities(similarities, total_similarity);
                 addSimilarities(similarities_rgb, total_similarity_rgb);
@@ -2694,11 +2850,11 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
 
                         if (color_features_enabled == false)
                             score_rgb = (score_rgb * 100.f)
-                                    / (16 * num_features) + 0.5f;
+                                    / (15 * num_features) + 0.5f;
                         else
                         {
                             score_rgb = (score_rgb * 100.f)
-                                    / (16 * (num_features + num_color_features))
+                                    / (15 * (num_features + num_color_features))
                                     + 0.5f;
 
                         }
@@ -2846,7 +3002,12 @@ std::vector<std::string> Detector::classIds() const {
 }
 
 void Detector::read(const FileNode& fn) {
+
+    import_similarity_csv();
+
     class_templates.clear();
+
+    bool use_hsv = (bool)((int)fn["use_hsv"]);
     pyramid_levels = fn["pyramid_levels"];
     fn["T"] >> T_at_level;
 
@@ -2854,11 +3015,13 @@ void Detector::read(const FileNode& fn) {
     FileNode modalities_fn = fn["modalities"];
     FileNodeIterator it = modalities_fn.begin(), it_end = modalities_fn.end();
     for (; it != it_end; ++it) {
-        modalities.push_back(Modality::create(*it));
+        modalities.push_back(Modality::create(*it, use_hsv));
     }
 }
 
-void Detector::write(FileStorage& fs) const {
+void Detector::write(FileStorage& fs, bool use_hsv) const {
+
+    fs << "use_hsv" << (int)use_hsv;
     fs << "pyramid_levels" << pyramid_levels;
     fs << "T" << T_at_level;
 
@@ -2968,19 +3131,27 @@ void Detector::writeClasses(const std::string& format) const {
 
 static const int T_DEFAULTS[] = { 5, 8 };
 
-Ptr<Detector> getDefaultLINERGB(const bool color_features_enabled) {
+Ptr<Detector> getDefaultLINERGB(const bool use_HSV, const bool color_features_enabled) {
     std::vector < Ptr<Modality> > modalities;
-    modalities.push_back(new ColorGradient);
+    modalities.push_back(new ColorGradient(use_HSV));
+
+    if(use_HSV == true)
+        import_similarity_csv();
+
     return new Detector(modalities,
             std::vector<int>(T_DEFAULTS, T_DEFAULTS + 2),
             color_features_enabled);
 }
 
-Ptr<Detector> getDefaultLINEMODRGB(const bool color_features_enabled) {
+Ptr<Detector> getDefaultLINEMODRGB(const bool use_HSV, const bool color_features_enabled) {
 
     std::vector < Ptr<Modality> > modalities;
-    modalities.push_back(new ColorGradient);
+    modalities.push_back(new ColorGradient(use_HSV));
     modalities.push_back(new DepthNormal);
+
+    if(use_HSV == true)
+            import_similarity_csv();
+
     return new Detector(modalities,
             std::vector<int>(T_DEFAULTS, T_DEFAULTS + 2),
             color_features_enabled);
