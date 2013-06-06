@@ -507,12 +507,6 @@ void quantizedOrientations(const Mat& src, Mat& magnitude, Mat& angle, Mat& colo
         waitKey();*/
     }
 
-
-    if(hsv == true)
-        std::cout<<"HSV TRUE"<<std::endl;
-    else
-        std::cout<<"HSV FALSE"<<std::endl;
-
     //if we are quantizing the orientations and colors to the higher pyramid level, we initialize the mat to store higher magnitudes in the source for further analysis (signature)
     if (compute_magnitude_strong == true) {
         magnitude_strong.create(src.size(), CV_32F);
@@ -2546,12 +2540,10 @@ void Detector::match(const std::vector<Mat>& sources, float threshold,
                 if(cgp->use_HSV == false)
                 {
                     computeResponseMapsRGB(spread_quantized_rgb, response_maps_rgb);
-                    std::cout<<"VA QUI? "<<std::endl;
                 }
                 else
                 {
                     computeResponseMapsHSV(spread_quantized_rgb, response_maps_rgb);
-                    std::cout<<"SI CI VAA"<<std::endl;
                 }
             }
 
@@ -2659,21 +2651,11 @@ void Detector::match(const std::vector<Mat>& sources, float threshold,
 
             }
 
-            std::cout<<"prima rejected"<<std::endl;
-            for(int h = 0; h<matches.size(); ++h)
-            {
-                std::cout<<"match.similarity: "<<matches[h].similarity<<" - match.similarity_rgb: "<<matches[h].similarity_rgb<<std::endl;
-            }
             //erase the rejected matches
             std::vector<Match>::iterator new_begin = matches.begin();
             std::vector<Match>::iterator new_end_rejected = std::remove_if(
                     new_begin, matches.end(), RejectedPredicate());
             matches.erase(new_end_rejected, matches.end());
-            std::cout<<"dopo rejected"<<std::endl;
-            for(int h = 0; h<matches.size(); ++h)
-            {
-                std::cout<<"match.similarity: "<<matches[h].similarity<<" - match.similarity_rgb: "<<matches[h].similarity_rgb<<std::endl;
-            }
 
 
     }
