@@ -212,7 +212,7 @@ public:
 
     /**
      * \brief Form a quantized image pyramid from a source image.
-     *
+     *#include <opencv2/highgui/highgui.hpp>
      * \param[in] src  The source image. Type depends on the modality.
      * \param[in] mask Optional mask. If not empty, unmasked pixels are set to zero
      *                 in quantized image and cannot be extracted as features.

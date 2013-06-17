@@ -4,6 +4,7 @@
  *  Created on: May 15, 2013
  *      Author: manuele
  */
+#include "libfreenect.hpp"
 
 #include <iterator>
 #include <set>
@@ -21,6 +22,11 @@
 #include <dirent.h>
 #include <unistd.h>
 #include <sys/stat.h>
+
+
+
+using namespace cv;
+using namespace std;
 
 // Function prototypes
 cv::Mat rotateImage(const cv::Mat& source, double angle);
@@ -154,6 +160,91 @@ private:
   int64 start_, time_;
 };
 
+class Mutexb {
+public:
+    Mutexb() {
+        pthread_mutex_init( &m_mutex, NULL );
+    }
+    void lock() {
+        pthread_mutex_lock( &m_mutex );
+    }
+    void unlock() {
+        pthread_mutex_unlock( &m_mutex );
+    }
+private:
+    pthread_mutex_t m_mutex;
+};
+
+class MyFreenectDevice : public Freenect::FreenectDevice {
+  public:
+    MyFreenectDevice(freenect_context *_ctx, int _index)
+        : Freenect::FreenectDevice(_ctx, _index), m_buffer_depth(FREENECT_DEPTH_11BIT),m_buffer_rgb(FREENECT_VIDEO_RGB), m_gamma(2048), m_new_rgb_frame(false), m_new_depth_frame(false),
+          depthMat(Size(640,480),CV_16UC1), rgbMat(Size(640,480),CV_8UC3,Scalar(0)), ownMat(Size(640,480),CV_8UC3,Scalar(0))
+    {
+        for( unsigned int i = 0 ; i < 2048 ; i++) {
+            float v = i/2048.0;
+            v = std::pow(v, 3)* 6;
+            m_gamma[i] = v*6*256;
+        }
+    }
+    // Do not call directly even in child
+    void VideoCallback(void* _rgb, uint32_t timestamp) {
+        //std::cout << "RGB callback" << std::endl;
+        m_rgb_mutex.lock();
+        uint8_t* rgb = static_cast<uint8_t*>(_rgb);
+        rgbMat.data = rgb;
+        m_new_rgb_frame = true;
+        m_rgb_mutex.unlock();
+    };
+    // Do not call directly even in child
+    void DepthCallback(void* _depth, uint32_t timestamp) {
+        //std::cout << "Depth callback" << std::endl;
+        m_depth_mutex.lock();
+        uint16_t* depth = static_cast<uint16_t*>(_depth);
+        depthMat.data = (uchar*) depth;
+        m_new_depth_frame = true;
+        m_depth_mutex.unlock();
+    }
+
+    bool getVideo(Mat& output) {
+        m_rgb_mutex.lock();
+        if(m_new_rgb_frame) {
+            cvtColor(rgbMat, output, CV_RGB2BGR);
+            m_new_rgb_frame = false;
+            m_rgb_mutex.unlock();
+            return true;
+        } else {
+            m_rgb_mutex.unlock();
+            return false;
+        }
+    }
+
+    bool getDepth(Mat& output) {
+            m_depth_mutex.lock();
+            if(m_new_depth_frame) {
+                depthMat.copyTo(output);
+                m_new_depth_frame = false;
+                m_depth_mutex.unlock();
+                return true;
+            } else {
+                m_depth_mutex.unlock();
+                return false;
+            }
+        }
+
+  private:
+    std::vector<uint8_t> m_buffer_depth;
+    std::vector<uint8_t> m_buffer_rgb;
+    std::vector<uint16_t> m_gamma;
+    Mat depthMat;
+    Mat rgbMat;
+    Mat ownMat;
+    Mutexb m_rgb_mutex;
+    Mutexb m_depth_mutex;
+    bool m_new_rgb_frame;
+    bool m_new_depth_frame;
+};
+
 // Functions to store detector and templates in single XML/YAML file
 static cv::Ptr<cv::linemod::Detector> readLinemod(const std::string& filename)
 {
@@ -221,9 +312,9 @@ int main(int argc, char * argv[])
   bool show_timings = false;
   bool learn_online = false;
   int num_classes = 0;
-  int matching_threshold = 85;
+  int matching_threshold = 90;
   /// @todo Keys for changing these?
-  cv::Size roi_size(200, 200);
+  cv::Size roi_size(120, 120);
   int learning_lower_bound = 85;
   int learning_upper_bound = 95;
 
@@ -249,6 +340,9 @@ int main(int argc, char * argv[])
   bool hsv = false;
   bool rgb = false;
   bool no_train = false;
+  bool addexisting = false;
+
+  bool alt_capture = true;
 
   bool rotate_resize= true;
 
@@ -274,12 +368,15 @@ int main(int argc, char * argv[])
         if (strcmp("--notrain", argv[h]) == 0) {
             no_train = true;
         }
+        if (strcmp("--addexisting", argv[h]) == 0) {
+            addexisting = true;
+        }
 
       }
 
   std::string hsv_string = "";
   if(hsv == true)
-      hsv_string == "_hsv";
+      hsv_string = "_hsv";
 
   if (linemod == true)
   {
@@ -302,7 +399,7 @@ int main(int argc, char * argv[])
     detector_linergb = cv::line_rgb::getDefaultLINERGB(hsv);
   }
 
-  if(no_train == true)
+  if(no_train == true || addexisting == true)
   {
     std::vector<cv::String> ids;
     if(line2d == true || linemod == true)
@@ -336,25 +433,52 @@ int main(int argc, char * argv[])
       num_modalities = (int)detector_linergb->getModalities().size();
 
   // Open Kinect sensor
-  cv::VideoCapture capture( CV_CAP_OPENNI );
+  /*cv::VideoCapture capture( CV_CAP_OPENNI );
   if (!capture.isOpened())
   {
     printf("Could not open OpenNI-capable sensor\n");
     return -1;
   }
-  capture.set(CV_CAP_PROP_OPENNI_REGISTRATION, 1);
-  double focal_length = capture.get(CV_CAP_OPENNI_DEPTH_GENERATOR_FOCAL_LENGTH);
+  capture.set(CV_CAP_PROP_OPENNI_REGISTRATION, 1);*/
+  double focal_length = 575;//capture.get(CV_CAP_OPENNI_DEPTH_GENERATOR_FOCAL_LENGTH);
+
+  /*if(alt_capture == true)
+      capture.release();*/
+
+  Freenect::Freenect freenect;
+  MyFreenectDevice& device = freenect.createDevice<MyFreenectDevice>(0);
+    device.startVideo();
+    device.startDepth();
+    device.setAutoExposure(0);
+    device.setAutoWhiteBalance(0);
+    device.setColorCorrection(1);
+
   //printf("Focal length = %f\n", focal_length);
 
   // Main loop
-  cv::Mat color, depth;
+  Mat color(Size(640,480),CV_8UC3,Scalar(0));
+  Mat depth(Size(640,480),CV_16UC1);
   int index_template_shown = 0;
+
+
+
   for(;;)
   {
-    // Capture next color/depth pair
-    capture.grab();
-    capture.retrieve(depth, CV_CAP_OPENNI_DEPTH_MAP);
-    capture.retrieve(color, CV_CAP_OPENNI_BGR_IMAGE);
+//
+//        capture.grab();
+//        capture.retrieve(depth, CV_CAP_OPENNI_DEPTH_MAP);
+//
+//        std::cout<<"rows: "<<depth.rows<<" -cols: "<< depth.cols<<" - type: "<<depth.type()<<" - elemsize: "<<depth.elemSize()<< " - elemsize1: "<<depth.elemSize1()<<std::endl;
+//
+//        capture.retrieve(color, CV_CAP_OPENNI_BGR_IMAGE);
+
+
+
+std::cout<<"passo di qui"<<std::endl;
+    device.getVideo(color);
+    device.getDepth(depth);
+    //std::cout<<"rows: "<<depth.rows<<" -cols: "<< depth.cols<<" - type: "<<depth.type()<<" - elemsize: "<<depth.elemSize()<< " - elemsize1: "<<depth.elemSize1()<<std::endl;
+
 
     std::vector<cv::Mat> sources;
     sources.push_back(color);
@@ -373,8 +497,9 @@ int main(int argc, char * argv[])
       cv::Point pt1 = mouse - roi_offset; // top left
       cv::Point pt2 = mouse + roi_offset; // bottom right
 
-      if (event == cv::EVENT_RBUTTONDOWN)
+      if (event == cv::EVENT_LBUTTONDOWN)
       {
+
         // Compute object mask by subtracting the plane within the ROI
         std::vector<CvPoint> chain(4);
         chain[0] = pt1;
@@ -390,7 +515,12 @@ int main(int argc, char * argv[])
         //std::cout<< std::endl<< depth<<std::endl;
         //cv::waitKey();
         // Extract template
+
         std::string class_id = cv::format("class%d", num_classes);
+        std::cout << "Please enter a name for class " << num_classes << ": "<<std::endl;
+        std::cin >> class_id;
+
+        //std::string class_id = cv::format("class%d", num_classes);
         cv::Rect bb;
 
         if(rotate_resize == false)
@@ -534,15 +664,15 @@ int main(int argc, char * argv[])
                             extract_timer.stop();
                             if (template_id != -1)
                             {
-                                if(it_res_rot == 10) //resize == 1 rotation == 1 case
-                                {
+                                //if(it_res_rot == 10) //resize == 1 rotation == 1 case
+                                //{
                                     cv::destroyWindow("depth_mask_"+intToString(index_template_shown));
                                     index_template_shown = template_id;
                                     cv::imshow("color_mask", color_mask);
                                     cv::imshow("depth_mask_"+intToString(index_template_shown), depth_mask);
-                                }
+                                //}
 
-
+                                cv::circle(display, cv::Point(30,30), 40, cv::Scalar(255,0,0), -1);
                             printf("*** Added template (id %d) for existing object class %s***\n",
                                    template_id, m.class_id.c_str());
                             }
@@ -632,17 +762,18 @@ int main(int argc, char * argv[])
                           extract_timer.start();
                           int template_id = detector_linergb->addTemplate(tmp_sources, m.class_id, mask_resized_rotated[it_res_rot]);
                           extract_timer.stop();
+                          cv::circle(display, cv::Point(30,30), 40, cv::Scalar(0,0,255), -1);
                           if (template_id != -1)
                           {
-                              if(it_res_rot == 10) //resize == 1 rotation == 1 case
-                              {
+                              //if(it_res_rot == 10) //resize == 1 rotation == 1 case
+                              //{
                                   cv::destroyWindow("depth_mask_"+intToString(index_template_shown));
                                   index_template_shown = template_id;
                                   cv::imshow("color_mask", color_mask);
                                   cv::imshow("depth_mask_"+intToString(index_template_shown), depth_mask);
-                              }
+                              //}
 
-
+                              cv::circle(display, cv::Point(30,30), 40, cv::Scalar(255,0,0), -1);
                           printf("*** Added template (id %d) for existing object class %s***\n",
                                  template_id, m.class_id.c_str());
                           }
@@ -724,6 +855,10 @@ int main(int argc, char * argv[])
         ;
     }
   }
+
+//  device.stopVideo();
+//  device.stopDepth();
+//  freenect.deleteDevice(0);
   return 0;
 }
 
@@ -735,17 +870,17 @@ static void resize_and_rotate(std::vector<cv::Mat> sources, cv::Mat mask, std::v
     std::vector<cv::Mat> mask_resized;
 
     std::vector<double> resizes;
-    resizes.push_back(0.7);
-    resizes.push_back(0.8);
-    resizes.push_back(0.9);
+    //resizes.push_back(0.8);
+    //resizes.push_back(0.9);
     resizes.push_back(1.0);
-    resizes.push_back(1.2);
-    resizes.push_back(1.4);
+    //resizes.push_back(1.2);
 
     std::vector<double> rotations;
-    rotations.push_back(-22.5);
+    //rotations.push_back(-90);
+    //rotations.push_back(-22.5);
     rotations.push_back(1.0);
-    rotations.push_back(22.5);
+    //rotations.push_back(22.5);
+    //rotations.push_back(90);
 
     for (int iter = 0; iter < resizes.size(); iter++) {
         double resize_factor = resizes[iter];
@@ -817,8 +952,16 @@ static void resize_and_rotate(std::vector<cv::Mat> sources, cv::Mat mask, std::v
             ushort* ptr = sources_depth_resized_rotated[it].ptr<ushort>(i);
             for (int j = 0; j < sources_depth_resized_rotated[it].cols; j++)
             {
+                if(ptr[j] == std::numeric_limits<ushort>::max())
+                {
+                    std::cout<<"grande"<<std::endl;
+                    ptr[j] = std::numeric_limits<ushort>::max() -1;
+                }
                 if(ptr[j] == 0)
+                {
+                    //std::cout<<"piccolo"<<std::endl;
                     ptr[j] = 1;
+                }
             }
 
         }
@@ -842,7 +985,7 @@ static void reprojectPoints(const std::vector<cv::Point3d>& proj, std::vector<cv
 
 static void filterPlane(IplImage * ap_depth, std::vector<IplImage *> & a_masks, std::vector<CvPoint> & a_chain, double f)
 {
-  const int l_num_cost_pts = 200;
+  const int l_num_cost_pts = 120;
 
   float l_thres = 4;
 
@@ -1200,6 +1343,9 @@ void drawResponseLineRGB(const std::vector<cv::line_rgb::Template>& templates,
         short rejected, std::string class_id) {
 
     cv::Scalar colorT;
+
+    cv::rectangle(dst,cv::Point(offset.x - 15, offset.y - 15),cv::Point(offset.x + templates[0].width + 15, offset.y + templates[0].height + 15), CV_RGB(255, 0, 0));
+    cv::putText(dst, class_id, cv::Point(offset.x - 30, offset.y - 30),cv::FONT_HERSHEY_SIMPLEX, 1, CV_RGB(255, 0, 0));
     for (int m = 0; m < num_modalities; ++m) {
 
         for (int i = 0; i < (int) templates[m].features.size(); ++i) {

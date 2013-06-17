@@ -1223,6 +1223,53 @@ void quantizedNormals(const Mat& src, Mat& dst, int distance_threshold,
                     int l_val3 = static_cast<int>(l_nz * GRANULARITY
                             + GRANULARITY);
 
+                    /*if(l_val1 <0 || l_val1>19)
+                                        {
+
+                                            std::cout<<"                                        l_val1 SCAPOCCIA: "<<l_val1<<std::endl;
+                                            std::cout<<"                                        l_nx: "<<l_nx<<std::endl;
+                                        }
+                    //                    else
+                    //                    {
+                    //                        std::cout<<"l_val1 GIUSTO: "<<l_val1<<std::endl;
+                    //                        std::cout<<"l_nx: "<<l_nx<<std::endl;
+                    //                    }
+                                        if(l_val2 <0 || l_val2>19)
+                                        {
+
+                                            std::cout<<"                                         l_val2 SCAPOCCIA: "<<l_val2<<std::endl;
+                                            std::cout<<"                                         l_ny: "<<l_ny<<std::endl;
+                                        }
+                    //                    else
+                    //                    {
+                    //                        std::cout<<"l_val2 GIUSTO: "<<l_val2<<std::endl;
+                    //                        std::cout<<"l_ny: "<<l_ny<<std::endl;
+                    //                    }
+                                        if(l_val3 <0 || l_val3>19)
+                                        {
+
+                                            std::cout<<"                                       l_val3 SCAPOCCIA: "<<l_val3<<std::endl;
+                                            std::cout<<"                                       l_nz: "<<l_nz<<std::endl;
+                                        }
+                    //                    else
+                    //                    {
+                    //                        std::cout<<"l_val3 GIUSTO: "<<l_val3<<std::endl;
+                    //                        std::cout<<"l_nz: "<<l_nz<<std::endl;
+                    //                    }
+
+                    if(l_nx == 1)
+                    {
+                        std::cout<<"l_nx == 1 - l_val1: "<<l_val1<<std::endl;
+                    }
+                    if(l_ny == 1)
+                    {
+                        std::cout<<"l_ny == 1 - l_val2: "<<l_val2<<std::endl;
+                    }
+                    if(l_nz == 0)
+                    {
+                        std::cout<<"l_nz == 0 - l_val3: "<<l_val3<<std::endl;
+                    }*/
+
                     *lp_norm = NORMAL_LUT[l_val3][l_val2][l_val1];
                 } else {
                     *lp_norm = 0; // Discard shadows from depth sensor
@@ -2438,8 +2485,7 @@ struct MatchPredicate {
             threshold(threshold) {
     }
     bool operator()(const Match& m) {
-        //return m.similarity < threshold;
-       return m.similarity < 85;
+       return m.similarity < threshold;
     }
     float threshold;
 };
@@ -2882,8 +2928,10 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
                     MatchPredicate(threshold));
             candidates.erase(new_end, candidates.end());
 
+            float threshold_rgb_tmp;
+            (threshold + 5 <= 96) ? threshold_rgb_tmp = threshold + 5 : threshold_rgb_tmp = threshold;
             new_end_rgb = std::remove_if(candidates.begin(), candidates.end(),
-                    MatchPredicateRGB(threshold));
+                    MatchPredicateRGB(threshold_rgb_tmp));
             candidates.erase(new_end_rgb, candidates.end());
 
 //            std::cout<<"dopo"<<std::endl;
