@@ -89,7 +89,7 @@ static void writeLine2D(const cv::Ptr<cv::linemod::Detector>& detector,
 
 void drawResponseLineRGB(const std::vector<cv::line_rgb::Template>& templates,
         int num_modalities, cv::Mat& dst, cv::Point offset, int T,
-        short rejected, string class_id);
+        short rejected, string class_id, bool only_non_border);
 
 void drawResponseLine2D(const std::vector<cv::linemod::Template>& templates,
         int num_modalities, cv::Mat& dst, cv::Point offset, int T,
@@ -131,6 +131,7 @@ int main(int argc, char * argv[]) {
     bool linemodrgb = false;
     bool hsv = false;
     bool rgb = false;
+    bool only_non_border = false;
     bool help = false;
 
     string path_name = "";
@@ -180,6 +181,9 @@ int main(int argc, char * argv[]) {
         }
         if (strcmp("--rgb", argv[h]) == 0) {
             rgb = true;
+        }
+        if (strcmp("--no_border", argv[h]) == 0) {
+            only_non_border = true;
         }
         if (strcmp("-h", argv[h]) == 0) {
             help = true;
@@ -255,6 +259,8 @@ int main(int argc, char * argv[]) {
             return 0;
         }
     }
+    if(only_non_border == true)
+        printf("Only consider color features not on the object borders\n");
 
     string templates_folder = "";
     path_name = "";
@@ -606,7 +612,7 @@ int main(int argc, char * argv[]) {
                     Timer match_timer;
                     match_timer.start();
                     detector_rgb->match(sources, 80, matches, class_ids,
-                            quantized_images);
+                            quantized_images, only_non_border);
                     match_timer.stop();
                     printf("Matching: %.2fs\n", match_timer.time());
                     int classes_visited = 0;
@@ -633,7 +639,7 @@ int main(int argc, char * argv[]) {
                             drawResponseLineRGB(templates, num_modalities,
                                     display, cv::Point(m.x, m.y),
                                     detector_rgb->getT(0), m.rejected,
-                                    m.class_id.c_str());
+                                    m.class_id.c_str(), only_non_border);
 
                         }
 
@@ -701,7 +707,7 @@ int main(int argc, char * argv[]) {
                     Timer match_timer;
                     match_timer.start();
                     detector_linemodrgb->match(sources, 80, matches, class_ids,
-                            quantized_images);
+                            quantized_images, only_non_border);
                     match_timer.stop();
                     printf("Matching: %.2fs\n", match_timer.time());
                     int classes_visited = 0;
@@ -728,7 +734,7 @@ int main(int argc, char * argv[]) {
                             drawResponseLineRGB(templates, num_modalities,
                                     display, cv::Point(m.x, m.y),
                                     detector_linemodrgb->getT(0), -1,
-                                    m.class_id.c_str());
+                                    m.class_id.c_str(), only_non_border);
 
                         }
 
@@ -780,79 +786,56 @@ int main(int argc, char * argv[]) {
 
 void drawResponseLineRGB(const std::vector<cv::line_rgb::Template>& templates,
         int num_modalities, cv::Mat& dst, cv::Point offset, int T,
-        short rejected, string class_id) {
+        short rejected, string class_id, bool only_non_border) {
 
     cv::Scalar colorT;
     for (int m = 0; m < num_modalities; ++m) {
 
-        for (int i = 0; i < (int) templates[m].features.size(); ++i) {
-            cv::line_rgb::Feature f = templates[m].features[i];
-            cv::Point pt(f.x + offset.x, f.y + offset.y);
-            switch (f.rgb_label) {
-            case 0:
-                  colorT = CV_RGB(255, 0, 0);
-                  break;
-              case 1:
-                  colorT = CV_RGB(0, 255, 0);
-                  break;
-              case 2:
-                  colorT = CV_RGB(0, 0, 255);
-                  break;
-              case 3:
-                  colorT = CV_RGB(255, 255, 0);
-                  break;
-              case 4:
-                  colorT = CV_RGB(255, 0, 255);
-                  break;
-              case 5:
-                  colorT = CV_RGB(0, 255, 255);
-                  break;
-              case 6:
-                  colorT = CV_RGB(255, 255, 255);
-                  break;
-              case 7:
-                  colorT = CV_RGB(0, 0, 0);
-                  break;
-            }
-            if(m == 0)
-                cv::circle(dst, pt, T / 2, colorT);
-            if(m == 1)
-                cv::rectangle(dst,pt,Point(pt.x+1, pt.y+1), CV_RGB(255, 255, 255));
-        }
-        for (int i = 0; i < (int) templates[m].color_features.size(); ++i) {
-            cv::line_rgb::Feature f = templates[m].color_features[i];
-            cv::Point pt(f.x + offset.x, f.y + offset.y);
-            switch (f.rgb_label) {
-            case 0:
-                  colorT = CV_RGB(255, 0, 0);
-                  break;
-              case 1:
-                  colorT = CV_RGB(0, 255, 0);
-                  break;
-              case 2:
-                  colorT = CV_RGB(0, 0, 255);
-                  break;
-              case 3:
-                  colorT = CV_RGB(255, 255, 0);
-                  break;
-              case 4:
-                  colorT = CV_RGB(255, 0, 255);
-                  break;
-              case 5:
-                  colorT = CV_RGB(0, 255, 255);
-                  break;
-              case 6:
-                  colorT = CV_RGB(255, 255, 255);
-                  break;
-              case 7:
-                  colorT = CV_RGB(0, 0, 0);
-                  break;
-            }
+        int n_total_features = templates[m].features.size() + templates[m].color_features.size();
+        vector<cv::line_rgb::Feature> features;
+        features.insert(features.end(), templates[m].features.begin(),
+                templates[m].features.end());
+        features.insert(features.end(), templates[m].color_features.begin(),
+                templates[m].color_features.end());
 
+        for (int i = 0; i < (int) n_total_features; ++i) {
+            cv::line_rgb::Feature f = features[i];
+            cv::Point pt(f.x + offset.x, f.y + offset.y);
+            switch (f.rgb_label) {
+            case 0:
+                  colorT = CV_RGB(255, 0, 0);
+                  break;
+              case 1:
+                  colorT = CV_RGB(0, 255, 0);
+                  break;
+              case 2:
+                  colorT = CV_RGB(0, 0, 255);
+                  break;
+              case 3:
+                  colorT = CV_RGB(255, 255, 0);
+                  break;
+              case 4:
+                  colorT = CV_RGB(255, 0, 255);
+                  break;
+              case 5:
+                  colorT = CV_RGB(0, 255, 255);
+                  break;
+              case 6:
+                  colorT = CV_RGB(255, 255, 255);
+                  break;
+              case 7:
+                  colorT = CV_RGB(0, 0, 0);
+                  break;
+            }
             if(m == 0)
-                cv::circle(dst, pt, T / 2, colorT);
+            {
+                if(f.on_border == false || only_non_border == false)
+                    cv::circle(dst, pt, T / 2, colorT);
+                else
+                    cv::rectangle(dst,Point(pt.x-1, pt.y-1),cv::Point(pt.x+1, pt.y+1), CV_RGB(255, 255, 255));
+            }
             if(m == 1)
-                cv::rectangle(dst,pt,Point(pt.x+1, pt.y+1), CV_RGB(255, 255, 255));
+                cv::rectangle(dst,Point(pt.x, pt.y),cv::Point(pt.x+1, pt.y+1), CV_RGB(127, 127, 127));
         }
 
     }

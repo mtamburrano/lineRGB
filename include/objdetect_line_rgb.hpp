@@ -416,6 +416,7 @@ public:
     void match(const std::vector<Mat>& sources, float threshold, std::vector<Match>& matches,
             const std::vector<std::string>& class_ids = std::vector<std::string>(),
             OutputArrayOfArrays quantized_images = noArray(),
+            bool only_non_border_color = false,
             const std::vector<Mat>& masks = std::vector<Mat>()) const;
 
     /**
@@ -499,7 +500,8 @@ protected:
             const std::vector<Size>& sizes,
             float threshold, std::vector<Match>& matches,
             const std::string& class_id,
-            const std::vector<TemplatePyramid>& template_pyramids) const;
+            const std::vector<TemplatePyramid>& template_pyramids,
+            bool only_non_border_color_features) const;
 };
 
 /**

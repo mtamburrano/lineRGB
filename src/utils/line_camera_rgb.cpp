@@ -60,7 +60,7 @@ void drawResponse(const std::vector<cv::linemod::Template>& templates,
                   int num_modalities, cv::Mat& dst, cv::Point offset, int T);
 void drawResponseLineRGB(const std::vector<cv::line_rgb::Template>& templates,
         int num_modalities, cv::Mat& dst, cv::Point offset, int T,
-        short rejected, std::string class_id);
+        short rejected, std::string class_id, bool only_non_border);
 
 cv::Mat displayQuantized(const cv::Mat& quantized);
 
@@ -178,8 +178,8 @@ private:
 class MyFreenectDevice : public Freenect::FreenectDevice {
   public:
     MyFreenectDevice(freenect_context *_ctx, int _index)
-        : Freenect::FreenectDevice(_ctx, _index), m_buffer_depth(FREENECT_DEPTH_11BIT),m_buffer_rgb(FREENECT_VIDEO_RGB), m_gamma(2048), m_new_rgb_frame(false), m_new_depth_frame(false),
-          depthMat(Size(640,480),CV_16UC1), rgbMat(Size(640,480),CV_8UC3,Scalar(0)), ownMat(Size(640,480),CV_8UC3,Scalar(0))
+        : Freenect::FreenectDevice(_ctx, _index), m_buffer_depth(FREENECT_DEPTH_REGISTERED),m_buffer_rgb(FREENECT_VIDEO_RGB), m_gamma(2048), m_new_rgb_frame(false), m_new_depth_frame(false),
+          depthMat(Size(640,480),CV_16S), rgbMat(Size(640,480),CV_8UC3,Scalar(0)), ownMat(Size(640,480),CV_8UC3,Scalar(0))
     {
         for( unsigned int i = 0 ; i < 2048 ; i++) {
             float v = i/2048.0;
@@ -196,15 +196,78 @@ class MyFreenectDevice : public Freenect::FreenectDevice {
         m_new_rgb_frame = true;
         m_rgb_mutex.unlock();
     };
-    // Do not call directly even in child
-    void DepthCallback(void* _depth, uint32_t timestamp) {
+//    // Do not call directly even in child
+//    void DepthCallback(void* _depth, uint32_t timestamp) {
+//        //std::cout << "Depth callback" << std::endl;
+//        m_depth_mutex.lock();
+//        uint16_t* depth = static_cast<uint16_t*>(_depth);
+//        depthMat.data = (ushort*) depth;
+//        m_new_depth_frame = true;
+//        m_depth_mutex.unlock();
+//    }
+
+
+    void DepthCallback(void *v_depth, uint32_t timestamp)
+    {
+        int i;
+
         //std::cout << "Depth callback" << std::endl;
         m_depth_mutex.lock();
-        uint16_t* depth = static_cast<uint16_t*>(_depth);
-        depthMat.data = (uchar*) depth;
+        uint16_t *depth = (uint16_t*)v_depth;
+        depthMat.create(480, 640, CV_16S);
+        ushort * depthMatPtr = (ushort *) depthMat.data;
+        for (i=0; i<640*480; i++)
+            depthMatPtr[i] = (ushort) depth[i];
+//        for (i=0; i<640*480; i++) {
+//            //if (depth[i] >= 2048) continue;
+//            int pval = m_gamma[depth[i]] / 4;
+//            int lb = pval & 0xff;
+//            //std::cout<<"i:"<<i<<std::endl;
+//            //depthMatPtr[4*i+3] = 128; // default alpha value
+//            if (depth[i] ==  0) depthMatPtr[3*i+3] = 0; // remove anything without depth value
+//            switch (pval>>8) {
+//                case 0:
+//                    depthMatPtr[3*i+0] = 255;
+//                    depthMatPtr[3*i+1] = 255-lb;
+//                    depthMatPtr[3*i+2] = 255-lb;
+//                    break;
+//                case 1:
+//                    depthMatPtr[3*i+0] = 255;
+//                    depthMatPtr[3*i+1] = lb;
+//                    depthMatPtr[3*i+2] = 0;
+//                    break;
+//                case 2:
+//                    depthMatPtr[3*i+0] = 255-lb;
+//                    depthMatPtr[3*i+1] = 255;
+//                    depthMatPtr[3*i+2] = 0;
+//                    break;
+//                case 3:
+//                    depthMatPtr[3*i+0] = 0;
+//                    depthMatPtr[3*i+1] = 255;
+//                    depthMatPtr[3*i+2] = lb;
+//                    break;
+//                case 4:
+//                    depthMatPtr[3*i+0] = 0;
+//                    depthMatPtr[3*i+1] = 255-lb;
+//                    depthMatPtr[3*i+2] = 255;
+//                    break;
+//                case 5:
+//                    depthMatPtr[3*i+0] = 0;
+//                    depthMatPtr[3*i+1] = 0;
+//                    depthMatPtr[3*i+2] = 255-lb;
+//                    break;
+//                default:
+//                    depthMatPtr[3*i+0] = 0;
+//                    depthMatPtr[3*i+1] = 0;
+//                    depthMatPtr[3*i+2] = 0;
+//                    depthMatPtr[3*i+3] = 0;
+//                    break;
+//            }
+//        }
         m_new_depth_frame = true;
         m_depth_mutex.unlock();
     }
+
 
     bool getVideo(Mat& output) {
         m_rgb_mutex.lock();
@@ -312,9 +375,9 @@ int main(int argc, char * argv[])
   bool show_timings = false;
   bool learn_online = false;
   int num_classes = 0;
-  int matching_threshold = 90;
+  int matching_threshold = 85;
   /// @todo Keys for changing these?
-  cv::Size roi_size(120, 120);
+  cv::Size roi_size(130, 130);
   int learning_lower_bound = 85;
   int learning_upper_bound = 95;
 
@@ -341,6 +404,7 @@ int main(int argc, char * argv[])
   bool rgb = false;
   bool no_train = false;
   bool addexisting = false;
+  bool only_non_border = false;
 
   bool alt_capture = true;
 
@@ -370,6 +434,9 @@ int main(int argc, char * argv[])
         }
         if (strcmp("--addexisting", argv[h]) == 0) {
             addexisting = true;
+        }
+        if (strcmp("--no_border", argv[h]) == 0) {
+            only_non_border = true;
         }
 
       }
@@ -419,6 +486,9 @@ int main(int argc, char * argv[])
                argv[1], num_classes, detector_linergb->numTemplates());
     }
 
+    if(only_non_border == true)
+            printf("Only consider color features not on the object borders\n");
+
     if (!ids.empty())
     {
       printf("Class ids:\n");
@@ -433,13 +503,14 @@ int main(int argc, char * argv[])
       num_modalities = (int)detector_linergb->getModalities().size();
 
   // Open Kinect sensor
-  /*cv::VideoCapture capture( CV_CAP_OPENNI );
-  if (!capture.isOpened())
-  {
-    printf("Could not open OpenNI-capable sensor\n");
-    return -1;
-  }
-  capture.set(CV_CAP_PROP_OPENNI_REGISTRATION, 1);*/
+//  cv::VideoCapture capture( CV_CAP_OPENNI );
+//  if (!capture.isOpened())
+//  {
+//    printf("Could not open OpenNI-capable sensor\n");
+//    return -1;
+//  }
+//  capture.set(CV_CAP_PROP_OPENNI_REGISTRATION, 1);
+
   double focal_length = 575;//capture.get(CV_CAP_OPENNI_DEPTH_GENERATOR_FOCAL_LENGTH);
 
   /*if(alt_capture == true)
@@ -449,7 +520,7 @@ int main(int argc, char * argv[])
   MyFreenectDevice& device = freenect.createDevice<MyFreenectDevice>(0);
     device.startVideo();
     device.startDepth();
-    device.setAutoExposure(0);
+    device.setAutoExposure(1);
     device.setAutoWhiteBalance(0);
     device.setColorCorrection(1);
 
@@ -464,7 +535,7 @@ int main(int argc, char * argv[])
 
   for(;;)
   {
-//
+
 //        capture.grab();
 //        capture.retrieve(depth, CV_CAP_OPENNI_DEPTH_MAP);
 //
@@ -474,7 +545,7 @@ int main(int argc, char * argv[])
 
 
 
-std::cout<<"passo di qui"<<std::endl;
+//std::cout<<"passo di qui"<<std::endl;
     device.getVideo(color);
     device.getDepth(depth);
     //std::cout<<"rows: "<<depth.rows<<" -cols: "<< depth.cols<<" - type: "<<depth.type()<<" - elemsize: "<<depth.elemSize()<< " - elemsize1: "<<depth.elemSize1()<<std::endl;
@@ -587,7 +658,7 @@ std::cout<<"passo di qui"<<std::endl;
     if(linemod  == true || line2d == true)
         detector_linemod->match(sources, (float)matching_threshold, matches_linemod, class_ids, quantized_images);
     if(linemodrgb  == true || linergb == true)
-        detector_linergb->match(sources, (float)matching_threshold, matches_linergb, class_ids, quantized_images);
+        detector_linergb->match(sources, (float)matching_threshold, matches_linergb, class_ids, quantized_images, only_non_border);
 
     match_timer.stop();
 
@@ -711,7 +782,7 @@ std::cout<<"passo di qui"<<std::endl;
             drawResponseLineRGB(templates, num_modalities,
                     display, cv::Point(m.x, m.y),
                     detector_linergb->getT(0), -1,
-                    m.class_id.c_str());
+                    m.class_id.c_str(), only_non_border);
 
             if (learn_online == true)
             {
@@ -985,7 +1056,7 @@ static void reprojectPoints(const std::vector<cv::Point3d>& proj, std::vector<cv
 
 static void filterPlane(IplImage * ap_depth, std::vector<IplImage *> & a_masks, std::vector<CvPoint> & a_chain, double f)
 {
-  const int l_num_cost_pts = 120;
+  const int l_num_cost_pts = 130;
 
   float l_thres = 4;
 
@@ -1340,50 +1411,34 @@ void templateConvexHullRGB(const std::vector<cv::line_rgb::Template>& templates,
 
 void drawResponseLineRGB(const std::vector<cv::line_rgb::Template>& templates,
         int num_modalities, cv::Mat& dst, cv::Point offset, int T,
-        short rejected, std::string class_id) {
+        short rejected, std::string class_id, bool only_non_border) {
 
     cv::Scalar colorT;
+
+    bool visualize_color = true;
+    bool visualize_gradient = true;
 
     cv::rectangle(dst,cv::Point(offset.x - 15, offset.y - 15),cv::Point(offset.x + templates[0].width + 15, offset.y + templates[0].height + 15), CV_RGB(255, 0, 0));
     cv::putText(dst, class_id, cv::Point(offset.x - 30, offset.y - 30),cv::FONT_HERSHEY_SIMPLEX, 1, CV_RGB(255, 0, 0));
     for (int m = 0; m < num_modalities; ++m) {
 
-        for (int i = 0; i < (int) templates[m].features.size(); ++i) {
-            cv::line_rgb::Feature f = templates[m].features[i];
-            cv::Point pt(f.x + offset.x, f.y + offset.y);
-            switch (f.rgb_label) {
-            case 0:
-                  colorT = CV_RGB(255, 0, 0);
-                  break;
-              case 1:
-                  colorT = CV_RGB(0, 255, 0);
-                  break;
-              case 2:
-                  colorT = CV_RGB(0, 0, 255);
-                  break;
-              case 3:
-                  colorT = CV_RGB(255, 255, 0);
-                  break;
-              case 4:
-                  colorT = CV_RGB(255, 0, 255);
-                  break;
-              case 5:
-                  colorT = CV_RGB(0, 255, 255);
-                  break;
-              case 6:
-                  colorT = CV_RGB(255, 255, 255);
-                  break;
-              case 7:
-                  colorT = CV_RGB(0, 0, 0);
-                  break;
-            }
-            if(m == 0)
-                cv::circle(dst, pt, T / 2, colorT);
-            if(m == 1)
-                cv::rectangle(dst,pt,cv::Point(pt.x+1, pt.y+1), CV_RGB(127, 127, 127));
+        int n_total_features = 0;
+        vector<cv::line_rgb::Feature> features;
+        if(visualize_color == true)
+        {
+            n_total_features += templates[m].color_features.size();
+            features.insert(features.end(), templates[m].color_features.begin(),
+                            templates[m].color_features.end());
         }
-        for (int i = 0; i < (int) templates[m].color_features.size(); ++i) {
-            cv::line_rgb::Feature f = templates[m].color_features[i];
+        if(visualize_gradient== true)
+        {
+            n_total_features += templates[m].features.size();
+            features.insert(features.end(), templates[m].features.begin(),
+                            templates[m].features.end());
+        }
+
+        for (int i = 0; i < (int) n_total_features; ++i) {
+            cv::line_rgb::Feature f = features[i];
             cv::Point pt(f.x + offset.x, f.y + offset.y);
             switch (f.rgb_label) {
             case 0:
@@ -1411,11 +1466,15 @@ void drawResponseLineRGB(const std::vector<cv::line_rgb::Template>& templates,
                   colorT = CV_RGB(0, 0, 0);
                   break;
             }
-
             if(m == 0)
-                cv::circle(dst, pt, T / 2, colorT);
-            if(m == 1)
-                cv::rectangle(dst,pt,cv::Point(pt.x+1, pt.y+1), CV_RGB(127, 127, 127));
+            {
+                if(f.on_border == false || only_non_border == false)
+                    cv::circle(dst, pt, T / 2, colorT);
+                else
+                    cv::rectangle(dst,Point(pt.x-1, pt.y-1),cv::Point(pt.x+1, pt.y+1), CV_RGB(255, 255, 255));
+            }
+            //if(m == 1)
+              //  cv::rectangle(dst,Point(pt.x, pt.y),cv::Point(pt.x+1, pt.y+1), CV_RGB(127, 127, 127));
         }
 
     }

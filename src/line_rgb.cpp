@@ -951,7 +951,7 @@ bool ColorGradientPyramid::extractTemplate(Template& templ) const {
     Mat local_mask;
     Mat border_mask;
 
-    bool only_border = true;
+    bool only_border = false;
     if (!mask.empty()) {
 
         erode(mask, border_mask, Mat(), Point(-1, -1), 3, BORDER_REPLICATE);
@@ -959,8 +959,13 @@ bool ColorGradientPyramid::extractTemplate(Template& templ) const {
         mask.copyTo(local_mask);
     }
 
+//    imshow("mask",local_mask);
+//    imshow("border_mask",border_mask);
+//    waitKey();
+
     // Create sorted list of all pixels with magnitude greater than a threshold
     std::vector < Candidate > candidates;
+    std::vector < Candidate > candidates_inside;
     std::vector < Candidate > candidates_color_features;
     bool no_mask = local_mask.empty();
     float threshold_sq = CV_SQR(strong_threshold);
@@ -1019,7 +1024,7 @@ bool ColorGradientPyramid::extractTemplate(Template& templ) const {
                             on_borderCount++;
 
                         } else if(only_border == false)
-                            candidates.push_back(
+                            candidates_inside.push_back(
                                     Candidate(c, r, getLabel(quantized),
                                             getLabel(quantized_rgb), false,
                                             score));
@@ -1034,21 +1039,27 @@ bool ColorGradientPyramid::extractTemplate(Template& templ) const {
     templ.total_candidates = quantCount;
 
     // We require a certain number of features
-    if (candidates.size() < num_features)
+    if (candidates.size() + candidates_inside.size() < num_features)
         return false;
     // NOTE: Stable sort to agree with old code, which used std::list::sort()
     std::stable_sort(candidates.begin(), candidates.end());
+    std::stable_sort(candidates_inside.begin(), candidates_inside.end());
+    std::stable_sort(candidates_color_features.begin(), candidates_color_features.end());
 
-    if (on_borderCount <= (candidates.size() / 2)) {
-        candidates_color_features.clear();
-    } else {
-        selectScatteredFeatures(candidates_color_features, templ.color_features,
-                num_color_features, color_distance);
-    }
+    selectScatteredFeatures(candidates_color_features, templ.color_features, num_color_features, color_distance);
 
     // Use heuristic based on surplus of candidates in narrow outline for initial distance threshold
-    float distance = static_cast<float>(candidates.size() / num_features + 1);
-    selectScatteredFeatures(candidates, templ.features, num_features, distance);
+    int div_param = 1;
+    if(only_border == false)
+        div_param = 2;
+    float distance = static_cast<float>(candidates.size() / (num_features/div_param) + 1);
+
+    selectScatteredFeatures(candidates, templ.features, ceil(num_features/div_param), distance);
+    vector<Feature> features_inside;
+    selectScatteredFeatures(candidates_inside, features_inside, floor(num_features/div_param), distance);
+    templ.features.insert(templ.features.end(), features_inside.begin(),
+            features_inside.end());
+
 
     // Size determined externally, needs to match templates for other modalities
     templ.width = -1;
@@ -1059,12 +1070,12 @@ bool ColorGradientPyramid::extractTemplate(Template& templ) const {
 }
 
 ColorGradient::ColorGradient() :
-        weak_threshold(50.0f), num_features(63), strong_threshold(70.0f), threshold_rgb(
+        weak_threshold(50.0f), num_features(126), strong_threshold(70.0f), threshold_rgb(
                 65), use_HSV(false) {
 }
 
 ColorGradient::ColorGradient(bool use_HSV) :
-        weak_threshold(50.0f), num_features(63), strong_threshold(70.0f), threshold_rgb(
+        weak_threshold(50.0f), num_features(126), strong_threshold(70.0f), threshold_rgb(
                         65), use_HSV(use_HSV) {
 }
 
@@ -2003,7 +2014,7 @@ void similarity(const std::vector<Mat>& linear_memories, const Template& templ,
  */
 void similarityRGB(const std::vector<Mat>& linear_memories,
         const std::vector<Mat>& linear_memories_rgb, const Template& templ,
-        Mat& dst, Mat& dst_rgb, Size size, int T, bool color_features_enabled) {
+        Mat& dst, Mat& dst_rgb, Size size, int T, bool color_features_enabled, bool only_non_border_color_features) {
 
     //the 63 features limit has been removed in LINERGB
     //CV_Assert(templ.features.size() <= 63);
@@ -2062,9 +2073,12 @@ void similarityRGB(const std::vector<Mat>& linear_memories,
     }
 
     for (int i = 0; i < total_features_size; ++i) {
+        bool only_gradient_features = false;
         bool only_color_features = false;
         if (i >= offset_end_usual_features)
             only_color_features = true;
+        if(only_non_border_color_features == true && only_color_features == false)
+            only_gradient_features = true;
 
         // Add the linear memory at the appropriate offset computed from the location of
         // the feature in the template
@@ -2078,9 +2092,9 @@ void similarityRGB(const std::vector<Mat>& linear_memories,
         const uchar* lm_ptr;
         if (only_color_features == false)
             lm_ptr = accessLinearMemory(linear_memories, f, T, W);
-
-        const uchar* lm_ptr_rgb = accessLinearMemoryRGB(linear_memories_rgb, f,
-                T, W);
+        const uchar* lm_ptr_rgb;
+        if (only_gradient_features == false)
+            lm_ptr_rgb = accessLinearMemoryRGB(linear_memories_rgb, f, T, W);
 
         // Now we do an aligned/unaligned add of dst_ptr and lm_ptr with template_positions elements
         int j = 0;
@@ -2106,14 +2120,17 @@ void similarityRGB(const std::vector<Mat>& linear_memories,
                     dst_ptr_sse[1] = _mm_add_epi16(dst_ptr_sse[1], v_alignedHi);
                 }
 
-                __m128i v_aligned_rgb = _mm_lddqu_si128(reinterpret_cast<const __m128i*>(lm_ptr_rgb + j));
-                __m128i v_alignedLo_rgb = _mm_unpacklo_epi8(v_aligned_rgb, _mm_setzero_si128());
-                __m128i v_alignedHi_rgb = _mm_unpackhi_epi8(v_aligned_rgb, _mm_setzero_si128());
+                if(only_gradient_features == false)
+                {
+                    __m128i v_aligned_rgb = _mm_lddqu_si128(reinterpret_cast<const __m128i*>(lm_ptr_rgb + j));
+                    __m128i v_alignedLo_rgb = _mm_unpacklo_epi8(v_aligned_rgb, _mm_setzero_si128());
+                    __m128i v_alignedHi_rgb = _mm_unpackhi_epi8(v_aligned_rgb, _mm_setzero_si128());
 
-                __m128i* dst_ptr_rgb_sse = reinterpret_cast<__m128i*>(dst_ptr_rgb_ushort + j);
+                    __m128i* dst_ptr_rgb_sse = reinterpret_cast<__m128i*>(dst_ptr_rgb_ushort + j);
 
-                dst_ptr_rgb_sse[0] = _mm_add_epi16(dst_ptr_rgb_sse[0], v_alignedLo_rgb);
-                dst_ptr_rgb_sse[1] = _mm_add_epi16(dst_ptr_rgb_sse[1], v_alignedHi_rgb);
+                    dst_ptr_rgb_sse[0] = _mm_add_epi16(dst_ptr_rgb_sse[0], v_alignedLo_rgb);
+                    dst_ptr_rgb_sse[1] = _mm_add_epi16(dst_ptr_rgb_sse[1], v_alignedHi_rgb);
+                }
 
             }
         }
@@ -2136,14 +2153,17 @@ void similarityRGB(const std::vector<Mat>& linear_memories,
                     dst_ptr_sse[1] = _mm_add_epi16(dst_ptr_sse[1], v_alignedHi);
                 }
 
-                __m128i v_aligned_rgb = _mm_loadu_si128(reinterpret_cast<const __m128i*>(lm_ptr_rgb + j));
-                __m128i v_alignedLo_rgb = _mm_unpacklo_epi8(v_aligned_rgb, _mm_setzero_si128());
-                __m128i v_alignedHi_rgb = _mm_unpackhi_epi8(v_aligned_rgb, _mm_setzero_si128());
+                if(only_gradient_features == false)
+                {
+                    __m128i v_aligned_rgb = _mm_loadu_si128(reinterpret_cast<const __m128i*>(lm_ptr_rgb + j));
+                    __m128i v_alignedLo_rgb = _mm_unpacklo_epi8(v_aligned_rgb, _mm_setzero_si128());
+                    __m128i v_alignedHi_rgb = _mm_unpackhi_epi8(v_aligned_rgb, _mm_setzero_si128());
 
-                __m128i* dst_ptr_rgb_sse = reinterpret_cast<__m128i*>(dst_ptr_rgb_ushort + j);
+                    __m128i* dst_ptr_rgb_sse = reinterpret_cast<__m128i*>(dst_ptr_rgb_ushort + j);
 
-                dst_ptr_rgb_sse[0] = _mm_add_epi16(dst_ptr_rgb_sse[0], v_alignedLo_rgb);
-                dst_ptr_rgb_sse[1] = _mm_add_epi16(dst_ptr_rgb_sse[1], v_alignedHi_rgb);
+                    dst_ptr_rgb_sse[0] = _mm_add_epi16(dst_ptr_rgb_sse[0], v_alignedLo_rgb);
+                    dst_ptr_rgb_sse[1] = _mm_add_epi16(dst_ptr_rgb_sse[1], v_alignedHi_rgb);
+                }
 
             }
         }
@@ -2152,7 +2172,8 @@ void similarityRGB(const std::vector<Mat>& linear_memories,
         for (; j < template_positions; ++j) {
             if (only_color_features == false)
                 dst_ptr_ushort[j] += lm_ptr[j];
-            dst_ptr_rgb_ushort[j] += lm_ptr_rgb[j];
+            if(only_gradient_features == false)
+                dst_ptr_rgb_ushort[j] += lm_ptr_rgb[j];
         }
 
     }
@@ -2258,7 +2279,7 @@ void similarityLocal(const std::vector<Mat>& linear_memories,
 void similarityLocalRGB(const std::vector<Mat>& linear_memories,
         const std::vector<Mat>& linear_memories_rgb, const Template& templ,
         Mat& dst, Mat& dst_rgb, Size size, int T, Point center,
-        const bool color_features_enabled) {
+        const bool color_features_enabled, bool only_non_border_color_features) {
 
     // Similar to whole-image similarity() above. This version takes a position 'center'
     // and computes the energy in the 16x16 patch centered on it.
@@ -2303,9 +2324,12 @@ void similarityLocalRGB(const std::vector<Mat>& linear_memories,
     }
 
     for (int i = 0; i < total_features_size; ++i) {
+        bool only_gradient_features = false;
         bool only_color_features = false;
         if (i >= offset_end_usual_features)
             only_color_features = true;
+        if(only_non_border_color_features == true && only_color_features == false)
+            only_gradient_features = true;
 
         // Add the linear memory at the appropriate offset computed from the location of
         // the feature in the template
@@ -2320,8 +2344,9 @@ void similarityLocalRGB(const std::vector<Mat>& linear_memories,
         const uchar* lm_ptr;
         if (only_color_features == false)
             lm_ptr = accessLinearMemory(linear_memories, f, T, W);
-        const uchar* lm_ptr_rgb = accessLinearMemoryRGB(linear_memories_rgb, f,
-                T, W);
+        const uchar* lm_ptr_rgb;
+        if (only_gradient_features == false)
+            lm_ptr_rgb = accessLinearMemoryRGB(linear_memories_rgb, f, T, W);
 
         // Process whole row at a time if vectorization possible
 
@@ -2344,14 +2369,17 @@ void similarityLocalRGB(const std::vector<Mat>& linear_memories,
                     lm_ptr += W; // Step to next row
                 }
 
-                __m128i v_aligned_rgb = _mm_lddqu_si128(reinterpret_cast<const __m128i*>(lm_ptr_rgb));
-                __m128i v_alignedLo_rgb = _mm_unpacklo_epi8(v_aligned_rgb, _mm_setzero_si128());
-                __m128i v_alignedHi_rgb = _mm_unpackhi_epi8(v_aligned_rgb, _mm_setzero_si128());
+                if (only_gradient_features == false)
+                {
+                    __m128i v_aligned_rgb = _mm_lddqu_si128(reinterpret_cast<const __m128i*>(lm_ptr_rgb));
+                    __m128i v_alignedLo_rgb = _mm_unpacklo_epi8(v_aligned_rgb, _mm_setzero_si128());
+                    __m128i v_alignedHi_rgb = _mm_unpackhi_epi8(v_aligned_rgb, _mm_setzero_si128());
 
-                dst_ptr_rgb_sse[row] = _mm_add_epi16(dst_ptr_rgb_sse[row], v_alignedLo_rgb);
-                dst_ptr_rgb_sse[row + 1] = _mm_add_epi16(dst_ptr_rgb_sse[row + 1], v_alignedHi_rgb);
+                    dst_ptr_rgb_sse[row] = _mm_add_epi16(dst_ptr_rgb_sse[row], v_alignedLo_rgb);
+                    dst_ptr_rgb_sse[row + 1] = _mm_add_epi16(dst_ptr_rgb_sse[row + 1], v_alignedHi_rgb);
 
-                lm_ptr_rgb += W; // Step to next row
+                    lm_ptr_rgb += W; // Step to next row
+                }
             }
 
         }
@@ -2375,14 +2403,17 @@ void similarityLocalRGB(const std::vector<Mat>& linear_memories,
                     lm_ptr += W; // Step to next row
                 }
 
-                __m128i v_aligned_rgb = _mm_loadu_si128(reinterpret_cast<const __m128i*>(lm_ptr_rgb));
-                __m128i v_alignedLo_rgb = _mm_unpacklo_epi8(v_aligned_rgb, _mm_setzero_si128());
-                __m128i v_alignedHi_rgb = _mm_unpackhi_epi8(v_aligned_rgb, _mm_setzero_si128());
+                if (only_gradient_features == false)
+                {
+                    __m128i v_aligned_rgb = _mm_loadu_si128(reinterpret_cast<const __m128i*>(lm_ptr_rgb));
+                    __m128i v_alignedLo_rgb = _mm_unpacklo_epi8(v_aligned_rgb, _mm_setzero_si128());
+                    __m128i v_alignedHi_rgb = _mm_unpackhi_epi8(v_aligned_rgb, _mm_setzero_si128());
 
-                dst_ptr_rgb_sse[row] = _mm_add_epi16(dst_ptr_rgb_sse[row], v_alignedLo_rgb);
-                dst_ptr_rgb_sse[row + 1] = _mm_add_epi16(dst_ptr_rgb_sse[row + 1], v_alignedHi_rgb);
+                    dst_ptr_rgb_sse[row] = _mm_add_epi16(dst_ptr_rgb_sse[row], v_alignedLo_rgb);
+                    dst_ptr_rgb_sse[row + 1] = _mm_add_epi16(dst_ptr_rgb_sse[row + 1], v_alignedHi_rgb);
 
-                lm_ptr_rgb += W; // Step to next row
+                    lm_ptr_rgb += W; // Step to next row
+                }
             }
 
         }
@@ -2402,13 +2433,16 @@ void similarityLocalRGB(const std::vector<Mat>& linear_memories,
                 }
             }
 
-            ushort* dst_ptr_rgb = dst_rgb.ptr<ushort>();
-            for (int row = 0; row < 16; ++row) {
-                for (int col = 0; col < 16; ++col)
-                    dst_ptr_rgb[col] += lm_ptr_rgb[col];
+            if (only_gradient_features == false)
+            {
+                ushort* dst_ptr_rgb = dst_rgb.ptr<ushort>();
+                for (int row = 0; row < 16; ++row) {
+                    for (int col = 0; col < 16; ++col)
+                        dst_ptr_rgb[col] += lm_ptr_rgb[col];
 
-                dst_ptr_rgb += 16;
-                lm_ptr_rgb += W;
+                    dst_ptr_rgb += 16;
+                    lm_ptr_rgb += W;
+                }
             }
 
         }
@@ -2523,6 +2557,7 @@ struct RejectedPredicate {
 void Detector::match(const std::vector<Mat>& sources, float threshold,
         std::vector<Match>& matches, const std::vector<std::string>& class_ids,
         OutputArrayOfArrays quantized_images,
+        bool only_non_border_color_features,
         const std::vector<Mat>& masks) const {
     matches.clear();
     if (quantized_images.needed())
@@ -2617,7 +2652,7 @@ void Detector::match(const std::vector<Mat>& sources, float threshold,
                 class_templates.end();
         for (; it != itend; ++it)
             matchClass(lm_pyramid, lm_pyramid_rgb, sizes, threshold, matches,
-                    it->first, it->second);
+                    it->first, it->second, only_non_border_color_features);
     } else {
         // Match only templates for the requested class IDs
         for (int i = 0; i < (int) class_ids.size(); ++i) {
@@ -2625,7 +2660,7 @@ void Detector::match(const std::vector<Mat>& sources, float threshold,
                     class_ids[i]);
             if (it != class_templates.end())
                 matchClass(lm_pyramid, lm_pyramid_rgb, sizes, threshold,
-                        matches, it->first, it->second);
+                        matches, it->first, it->second, only_non_border_color_features);
         }
     }
 
@@ -2712,7 +2747,9 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
         const LinearMemoryPyramid& lm_pyramid_rgb,
         const std::vector<Size>& sizes, float threshold,
         std::vector<Match>& matches, const std::string& class_id,
-        const std::vector<TemplatePyramid>& template_pyramids) const {
+        const std::vector<TemplatePyramid>& template_pyramids, bool only_non_border_color_features) const {
+
+
 
     Timer extract_timer;
     extract_timer.start();
@@ -2742,7 +2779,7 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
             if (i == 0) //color modality, add rgb
                 similarityRGB(lowest_lm[i], lowest_lm_rgb[i], templ,
                         similarities[i], similarities_rgb[i], sizes.back(),
-                        lowest_T, color_features_enabled);
+                        lowest_T, color_features_enabled, only_non_border_color_features);
             if (i == 1) //depth modality, without rgb
                 similarity(lowest_lm[i], templ, similarities[i], sizes.back(),
                         lowest_T);
@@ -2764,8 +2801,6 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
         // NOTE: This assumes max per-feature response is 4, so we scale between [2*nf, 4*nf].
         int raw_threshold = static_cast<int>(2 * num_features
                 + (threshold / 100.f) * (2 * num_features) + 0.5f);
-        int raw_threshold_rgb = static_cast<int>(7.5 * num_features
-                + (threshold / 100.f) * (7.5 * num_features) + 0.5f);
 
         // Find initial matches
         std::vector < Match > candidates;
@@ -2777,8 +2812,6 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
                 int raw_score = row[c];
 
                 int raw_score_rgb = row_rgb[c];    //*modalities.size();
-
-                int raw_score_combined = (raw_score + raw_score_rgb) / 2;
 
 
                 if (raw_score > raw_threshold) {
@@ -2850,7 +2883,7 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
                     if (i == 0) //color modality, add rgb
                         similarityLocalRGB(lms[i], lms_rgb[i], templ,
                                 similarities[i], similarities_rgb[i], size, T,
-                                Point(x, y), color_features_enabled);
+                                Point(x, y), color_features_enabled, only_non_border_color_features);
                     if (i == 1) //color modality, without rgb
                         similarityLocal(lms[i], templ, similarities[i], size, T,
                                 Point(x, y));
@@ -2881,9 +2914,18 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
                                     / (15 * num_features) + 0.5f;
                         else
                         {
-                            score_rgb = (score_rgb * 100.f)
-                                    / (15 * (num_features + num_color_features))
-                                    + 0.5f;
+                            if (only_non_border_color_features == false)
+                            {
+                                score_rgb = (score_rgb * 100.f)
+                                        / (15 * (num_features + num_color_features))
+                                        + 0.5f;
+                            }
+                            else //(only_non_border == true)
+                            {
+                                score_rgb = (score_rgb * 100.f)
+                                        / (15 * (num_color_features))
+                                        + 0.5f;
+                            }
 
                         }
                         int score_combined = (score + score_rgb) / 2;
