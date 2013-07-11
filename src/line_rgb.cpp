@@ -183,9 +183,9 @@ Rect cropTemplates(std::vector<Template>& templates, const Mat& mask_template) {
 
         Template& templ = templates[i];
 
-        for (int j = 0; j < (int) templ.features.size(); ++j) {
-            int x = templ.features[j].x << templ.pyramid_level;
-            int y = templ.features[j].y << templ.pyramid_level;
+        for (int j = 0; j < (int) templ.features_border.size(); ++j) {
+            int x = templ.features_border[j].x << templ.pyramid_level;
+            int y = templ.features_border[j].y << templ.pyramid_level;
             min_x = std::min(min_x, x);
             min_y = std::min(min_y, y);
             max_x = std::max(max_x, x);
@@ -211,9 +211,13 @@ Rect cropTemplates(std::vector<Template>& templates, const Mat& mask_template) {
         int offset_x = min_x >> templ.pyramid_level;
         int offset_y = min_y >> templ.pyramid_level;
 
-        for (int j = 0; j < (int) templ.features.size(); ++j) {
-            templ.features[j].x -= offset_x;
-            templ.features[j].y -= offset_y;
+        for (int j = 0; j < (int) templ.features_border.size(); ++j) {
+            templ.features_border[j].x -= offset_x;
+            templ.features_border[j].y -= offset_y;
+        }
+        for (int j = 0; j < (int) templ.features_inside.size(); ++j) {
+            templ.features_inside[j].x -= offset_x;
+            templ.features_inside[j].y -= offset_y;
         }
 
         for (int j = 0; j < (int) templ.color_features.size(); ++j) {
@@ -245,11 +249,17 @@ void Template::read(const FileNode& fn) {
     pyramid_level = fn["pyramid_level"];
     total_candidates = fn["total_candidates"];
     fn["contour"] >> contour;
-    FileNode features_fn = fn["features"];
-    features.resize(features_fn.size());
-    FileNodeIterator it = features_fn.begin(), it_end = features_fn.end();
-    for (int i = 0; it != it_end; ++it, ++i) {
-        features[i].read(*it);
+    FileNode features_border_fn = fn["features_border"];
+    features_border.resize(features_border_fn.size());
+    FileNodeIterator it_b = features_border_fn.begin(), it_end_b = features_border_fn.end();
+    for (int i = 0; it_b != it_end_b; ++it_b, ++i) {
+        features_border[i].read(*it_b);
+    }
+    FileNode features_inside_fn = fn["features_inside"];
+    features_inside.resize(features_inside_fn.size());
+    FileNodeIterator it_i = features_inside_fn.begin(), it_end_i = features_inside_fn.end();
+    for (int i = 0; it_i != it_end_i; ++it_i, ++i) {
+        features_inside[i].read(*it_i);
     }
     FileNode features_signature_fn = fn["color_features"];
     color_features.resize(features_signature_fn.size());
@@ -267,9 +277,14 @@ void Template::write(FileStorage& fs) const {
     fs << "pyramid_level" << pyramid_level;
     fs << "total_candidates" << total_candidates;
     fs << "contour" << contour;
-    fs << "features" << "[";
-    for (int i = 0; i < (int) features.size(); ++i) {
-        features[i].write(fs);
+    fs << "features_border" << "[";
+    for (int i = 0; i < (int) features_border.size(); ++i) {
+        features_border[i].write(fs);
+    }
+    fs << "]"; // features
+    fs << "features_inside" << "[";
+    for (int i = 0; i < (int) features_inside.size(); ++i) {
+        features_inside[i].write(fs);
     }
     fs << "]"; // features
     fs << "color_features" << "[";
@@ -964,7 +979,7 @@ bool ColorGradientPyramid::extractTemplate(Template& templ) const {
 //    waitKey();
 
     // Create sorted list of all pixels with magnitude greater than a threshold
-    std::vector < Candidate > candidates;
+    std::vector < Candidate > candidates_border;
     std::vector < Candidate > candidates_inside;
     std::vector < Candidate > candidates_color_features;
     bool no_mask = local_mask.empty();
@@ -976,9 +991,9 @@ bool ColorGradientPyramid::extractTemplate(Template& templ) const {
     Moments moms = moments(mask, true);
     Point central_mass(moms.m10 / moms.m00, moms.m01 / moms.m00);
     float mask_area = moms.m00;
-    float num_color_features = mask_area / 40;
-    float color_distance = sqrtf(static_cast<float>(mask_area))
-            / sqrtf(static_cast<float>(num_color_features)) + 1.5f;
+    //TODO the color features should be chosen proportional to the mask area
+    //float num_color_features = mask_area / 40;
+    float num_color_features = num_features;
 
     int on_borderCount = 0;
 
@@ -1018,7 +1033,7 @@ bool ColorGradientPyramid::extractTemplate(Template& templ) const {
                             uchar voted = votesRgbMag(c, r, score, quantized,
                                     color, magnitude, mask, central_mass);
 
-                            candidates.push_back(
+                            candidates_border.push_back(
                                     Candidate(c, r, getLabel(quantized),
                                             getLabel(voted), true, score));
                             on_borderCount++;
@@ -1039,27 +1054,26 @@ bool ColorGradientPyramid::extractTemplate(Template& templ) const {
     templ.total_candidates = quantCount;
 
     // We require a certain number of features
-    if (candidates.size() + candidates_inside.size() < num_features)
+    if (candidates_border.size() + candidates_inside.size() < num_features)
         return false;
     // NOTE: Stable sort to agree with old code, which used std::list::sort()
-    std::stable_sort(candidates.begin(), candidates.end());
+    std::stable_sort(candidates_border.begin(), candidates_border.end());
     std::stable_sort(candidates_inside.begin(), candidates_inside.end());
     std::stable_sort(candidates_color_features.begin(), candidates_color_features.end());
-
-    selectScatteredFeatures(candidates_color_features, templ.color_features, num_color_features, color_distance);
 
     // Use heuristic based on surplus of candidates in narrow outline for initial distance threshold
     int div_param = 1;
     if(only_border == false)
         div_param = 2;
-    float distance = static_cast<float>(candidates.size() / (num_features/div_param) + 1);
+    float distance = static_cast<float>(candidates_border.size() / (num_features/div_param) + 1);
+    //float color_distance = sqrtf(static_cast<float>(mask_area)) / sqrtf(static_cast<float>(num_color_features)) + 1.5f;
+    float color_distance = distance;
 
-    selectScatteredFeatures(candidates, templ.features, ceil(num_features/div_param), distance);
-    vector<Feature> features_inside;
-    selectScatteredFeatures(candidates_inside, features_inside, floor(num_features/div_param), distance);
-    templ.features.insert(templ.features.end(), features_inside.begin(),
-            features_inside.end());
+    selectScatteredFeatures(candidates_color_features, templ.color_features, num_color_features, color_distance);
 
+    selectScatteredFeatures(candidates_border, templ.features_border, ceil(num_features/div_param), distance);
+
+    selectScatteredFeatures(candidates_inside, templ.features_inside, floor(num_features/div_param), distance);
 
     // Size determined externally, needs to match templates for other modalities
     templ.width = -1;
@@ -1419,7 +1433,8 @@ bool DepthNormalPyramid::extractTemplate(Template& templ) const {
             no_mask ? normal.total() : countNonZero(local_mask));
     float distance = sqrtf(static_cast<float>(area))
             / sqrtf(static_cast<float>(num_features)) + 1.5f;
-    selectScatteredFeatures(candidates, templ.features, num_features, distance);
+
+    selectScatteredFeatures(candidates, templ.features_inside, num_features, distance);
 
     // Size determined externally, needs to match templates for other modalities
     templ.width = -1;
@@ -1916,7 +1931,7 @@ void similarity(const std::vector<Mat>& linear_memories, const Template& templ,
     // 255/4 = 63, so up to that many we can add up similarities in 8 bits without worrying
     // about overflow. Therefore here we use _mm_add_epi8 as the workhorse, whereas a more
     // general function would use _mm_add_epi16.
-    CV_Assert(templ.features.size() <= 63);
+    CV_Assert(templ.features_inside.size() + templ.features_border.size() <= 63);
     /// @todo Handle more than 255/MAX_RESPONSE features!!
 
     // Decimate input image size by factor of T
@@ -1951,13 +1966,18 @@ void similarity(const std::vector<Mat>& linear_memories, const Template& templ,
 
 //haveSSE2 = false;
 //haveSSE3 = false;
+    vector <cv::line_rgb::Feature> all_features;
+    all_features.insert(all_features.end(), templ.features_border.begin(),
+                templ.features_border.end());
+    all_features.insert(all_features.end(), templ.features_inside.begin(),
+                templ.features_inside.end());
 
     // Compute the similarity measure for this template by accumulating the contribution of
     // each feature
-    for (int i = 0; i < (int) templ.features.size(); ++i) {
+    for (int i = 0; i < (int) all_features.size(); ++i) {
         // Add the linear memory at the appropriate offset computed from the location of
         // the feature in the template
-        Feature f = templ.features[i];
+        Feature f = all_features[i];
         // Discard feature if out of bounds
         /// @todo Shouldn't actually see x or y < 0 here?
         if (f.x < 0 || f.x >= size.width || f.y < 0 || f.y >= size.height)
@@ -2056,14 +2076,20 @@ void similarityRGB(const std::vector<Mat>& linear_memories,
     // Compute the similarity measure for this template by accumulating the contribution of
     // each feature
 
-    int total_features_size;
+    int total_features_size, border_features_size;
     std::vector < cv::line_rgb::Feature > total_features;
 
-    total_features_size = (int) templ.features.size();
-    total_features.insert(total_features.end(), templ.features.begin(),
-            templ.features.end());
+    total_features.insert(total_features.end(), templ.features_border.begin(),
+                templ.features_border.end());
+    border_features_size = (int) total_features.size();
 
-    //we need this offset to know if we are evaluating the usual features or the signature features, in this case we only need to process the RGB part
+    total_features.insert(total_features.end(), templ.features_inside.begin(),
+                templ.features_inside.end());
+
+    total_features_size = (int) total_features.size();
+
+    //we need this offsets to know if we are evaluating the usual border features , the usual inside features or the signature features, in this case we only need to process the RGB part
+    int offset_end_border_features = border_features_size;
     int offset_end_usual_features = total_features_size;
 
     if (color_features_enabled == true) {
@@ -2077,7 +2103,7 @@ void similarityRGB(const std::vector<Mat>& linear_memories,
         bool only_color_features = false;
         if (i >= offset_end_usual_features)
             only_color_features = true;
-        if(only_non_border_color_features == true && only_color_features == false)
+        if(only_non_border_color_features == true && only_color_features == false && i<offset_end_border_features)
             only_gradient_features = true;
 
         // Add the linear memory at the appropriate offset computed from the location of
@@ -2194,7 +2220,7 @@ void similarityLocal(const std::vector<Mat>& linear_memories,
         const Template& templ, Mat& dst, Size size, int T, Point center) {
     // Similar to whole-image similarity() above. This version takes a position 'center'
     // and computes the energy in the 16x16 patch centered on it.
-    CV_Assert(templ.features.size() <= 63);
+    CV_Assert(templ.features_border.size() + templ.features_inside.size() <= 63);
 
     // Compute the similarity map in a 16x16 patch around center
     int W = size.width / T;
@@ -2215,8 +2241,14 @@ void similarityLocal(const std::vector<Mat>& linear_memories,
 #endif
 //haveSSE2 = false;
 //haveSSE3 = false;
-    for (int i = 0; i < (int) templ.features.size(); ++i) {
-        Feature f = templ.features[i];
+    vector <cv::line_rgb::Feature> all_features;
+    all_features.insert(all_features.end(), templ.features_border.begin(),
+                templ.features_border.end());
+    all_features.insert(all_features.end(), templ.features_inside.begin(),
+                templ.features_inside.end());
+
+    for (int i = 0; i < (int) all_features.size(); ++i) {
+        Feature f = all_features[i];
         f.x += offset_x;
         f.y += offset_y;
         // Discard feature if out of bounds, possibly due to applying the offset
@@ -2308,13 +2340,20 @@ void similarityLocalRGB(const std::vector<Mat>& linear_memories,
 
 //#endif
 
-    int total_features_size;
+    int total_features_size, border_features_size;
     std::vector < cv::line_rgb::Feature > total_features;
 
-    total_features_size = (int) templ.features.size();
-    total_features.insert(total_features.end(), templ.features.begin(),
-            templ.features.end());
-    //we need this offset to know if we are evaluating the usual features or the signature features, in this case we only need to process the RGB part
+    total_features.insert(total_features.end(), templ.features_border.begin(),
+                templ.features_border.end());
+    border_features_size = (int) total_features.size();
+
+    total_features.insert(total_features.end(), templ.features_inside.begin(),
+                templ.features_inside.end());
+
+    total_features_size = (int) total_features.size();
+
+    //we need this offsets to know if we are evaluating the usual border features , the usual inside features or the signature features, in this case we only need to process the RGB part
+    int offset_end_border_features = border_features_size;
     int offset_end_usual_features = total_features_size;
 
     if (color_features_enabled == true) {
@@ -2328,7 +2367,7 @@ void similarityLocalRGB(const std::vector<Mat>& linear_memories,
         bool only_color_features = false;
         if (i >= offset_end_usual_features)
             only_color_features = true;
-        if(only_non_border_color_features == true && only_color_features == false)
+        if(only_non_border_color_features == true && only_color_features == false && i<offset_end_border_features)
             only_gradient_features = true;
 
         // Add the linear memory at the appropriate offset computed from the location of
@@ -2343,11 +2382,14 @@ void similarityLocalRGB(const std::vector<Mat>& linear_memories,
 
         const uchar* lm_ptr;
         if (only_color_features == false)
+        {
             lm_ptr = accessLinearMemory(linear_memories, f, T, W);
+        }
         const uchar* lm_ptr_rgb;
         if (only_gradient_features == false)
+        {
             lm_ptr_rgb = accessLinearMemoryRGB(linear_memories_rgb, f, T, W);
-
+        }
         // Process whole row at a time if vectorization possible
 
 #if CV_SSE2
@@ -2564,6 +2606,11 @@ void Detector::match(const std::vector<Mat>& sources, float threshold,
         quantized_images.create(1,
                 static_cast<int>(pyramid_levels * modalities.size()), CV_8U);
 
+    if(only_non_border_color_features)
+        std::cout<<"only_non_border_color_features TRUE"<<std::endl;
+    else
+        std::cout<<"only_non_border_color_features FALSE"<<std::endl;
+
     assert(sources.size() == modalities.size());
     // Initialize each modality with our sources
     std::vector < Ptr<QuantizedPyramid> > quantizers;
@@ -2769,12 +2816,12 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
         std::vector < Mat > similarities_rgb(1);
         int lowest_start = static_cast<int>(tp.size() - modalities.size());
         int lowest_T = T_at_level.back();
-        int num_features = 0;
+        int num_all_features = 0;
         int num_color_features = 0;
         for (int i = 0; i < (int) modalities.size(); ++i) {
 
             const Template& templ = tp[lowest_start + i];
-            num_features += static_cast<int>(templ.features.size());
+            num_all_features += static_cast<int>(templ.features_border.size() + templ.features_inside.size());
             num_color_features += static_cast<int>(templ.color_features.size());
             if (i == 0) //color modality, add rgb
                 similarityRGB(lowest_lm[i], lowest_lm_rgb[i], templ,
@@ -2799,8 +2846,8 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
         // threshold scales from half the max response (what you would expect from applying
         // the template to a completely random image) to the max response.
         // NOTE: This assumes max per-feature response is 4, so we scale between [2*nf, 4*nf].
-        int raw_threshold = static_cast<int>(2 * num_features
-                + (threshold / 100.f) * (2 * num_features) + 0.5f);
+        int raw_threshold = static_cast<int>(2 * num_all_features
+                + (threshold / 100.f) * (2 * num_all_features) + 0.5f);
 
         // Find initial matches
         std::vector < Match > candidates;
@@ -2820,19 +2867,10 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
                     int x = c * lowest_T + offset;
                     int y = r * lowest_T + offset;
                     float score = (raw_score * 100.f)
-                            / (4 * num_features) + 0.5f;
-                    float score_rgb;
-
-                    if (color_features_enabled == false)
-                        score_rgb = (raw_score_rgb * 100.f)
-                                / (15 * num_features) + 0.5f;
-                    else
-                        score_rgb = (raw_score_rgb * 100.f)
-                                / (15 * (num_features + num_color_features))
-                                + 0.5f;
+                            / (4 * num_all_features) + 0.5f;
 
                     candidates.push_back(
-                            Match(x, y, 0, score, score_rgb, class_id,
+                            Match(x, y, 0, score, -1, class_id,
                                     static_cast<int>(template_id), 0));
                 }
             }
@@ -2872,13 +2910,19 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
                 y = std::min(y, max_y);
 
                 // Compute local similarity maps for each modality
-                int num_features = 0;
+                int num_all_features = 0;
+                int num_gradient_features = 0;
+                int num_inside_gradient_features = 0;
                 int num_color_features = 0;
                 for (int i = 0; i < (int) modalities.size(); ++i) {
                     const Template& templ = tp[start + i];
-                    num_features += static_cast<int>(templ.features.size());
-                    num_color_features +=
-                            static_cast<int>(templ.color_features.size());
+                    num_all_features += static_cast<int>(templ.features_border.size() + templ.features_inside.size());
+                    num_color_features += static_cast<int>(templ.color_features.size());
+                    if(i == 0)
+                    {
+                        num_gradient_features += static_cast<int>(templ.features_border.size() + templ.features_inside.size());
+                        num_inside_gradient_features += static_cast<int>(templ.features_inside.size());
+                    }
 
                     if (i == 0) //color modality, add rgb
                         similarityLocalRGB(lms[i], lms_rgb[i], templ,
@@ -2889,8 +2933,8 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
                                 Point(x, y));
 
                 }
-                if(modalities.size() == 2)
-                    num_color_features  *= 2;
+                //if(modalities.size() == 2)
+                    //num_color_features  *= 2;
 
                 addSimilarities(similarities, total_similarity);
                 addSimilarities(similarities_rgb, total_similarity_rgb);
@@ -2905,25 +2949,25 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
                     ushort* row_rgb = total_similarity_rgb.ptr < ushort > (r);
                     for (int c = 0; c < total_similarity.cols; ++c) {
                         int score = row[c];
-                        int score_rgb = row_rgb[c] * modalities.size();
+                        int score_rgb = row_rgb[c];
 
-                        score = (score * 100.f) / (4 * num_features);
+                        score = (score * 100.f) / (4 * num_all_features);
 
                         if (color_features_enabled == false)
                             score_rgb = (score_rgb * 100.f)
-                                    / (15 * num_features) + 0.5f;
+                                    / (15 * num_gradient_features) + 0.5f;
                         else
                         {
                             if (only_non_border_color_features == false)
                             {
                                 score_rgb = (score_rgb * 100.f)
-                                        / (15 * (num_features + num_color_features))
+                                        / (15 * (num_gradient_features + num_color_features))
                                         + 0.5f;
                             }
                             else //(only_non_border == true)
                             {
                                 score_rgb = (score_rgb * 100.f)
-                                        / (15 * (num_color_features))
+                                        / (15 * (num_inside_gradient_features + num_color_features))
                                         + 0.5f;
                             }
 

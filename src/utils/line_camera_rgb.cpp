@@ -1393,11 +1393,16 @@ void templateConvexHullRGB(const std::vector<cv::line_rgb::Template>& templates,
   std::vector<cv::Point> points;
   for (int m = 0; m < num_modalities; ++m)
   {
-    for (int i = 0; i < (int)templates[m].features.size(); ++i)
-    {
-      cv::line_rgb::Feature f = templates[m].features[i];
-      points.push_back(cv::Point(f.x, f.y) + offset);
-    }
+      vector <cv::line_rgb::Feature> all_features;
+      all_features.insert(all_features.end(), templates[m].features_border.begin(),
+              templates[m].features_border.end());
+      all_features.insert(all_features.end(), templates[m].features_inside.begin(),
+              templates[m].features_inside.end());
+      for (int i = 0; i < (int)all_features.size(); ++i)
+        {
+          cv::line_rgb::Feature f = all_features[i];
+          points.push_back(cv::Point(f.x, f.y) + offset);
+        }
   }
 
   std::vector<cv::Point> hull;
@@ -1432,9 +1437,15 @@ void drawResponseLineRGB(const std::vector<cv::line_rgb::Template>& templates,
         }
         if(visualize_gradient== true)
         {
-            n_total_features += templates[m].features.size();
-            features.insert(features.end(), templates[m].features.begin(),
-                            templates[m].features.end());
+            vector <cv::line_rgb::Feature> all_features;
+            all_features.insert(all_features.end(), templates[m].features_border.begin(),
+                    templates[m].features_border.end());
+            all_features.insert(all_features.end(), templates[m].features_inside.begin(),
+                    templates[m].features_inside.end());
+
+            n_total_features += all_features.size();
+            features.insert(features.end(), all_features.begin(),
+                    all_features.end());
         }
 
         for (int i = 0; i < (int) n_total_features; ++i) {

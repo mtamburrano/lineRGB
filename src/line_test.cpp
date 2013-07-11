@@ -423,11 +423,17 @@ int main(int argc, char * argv[]) {
                                 ///////////DEBUG/////////////////////////////
                                 if(DEBUG == true && iterRot == 1 && iter == 4)
                                 {
+
                                     const std::vector<cv::line_rgb::Template>& templates = detector_rgb->getTemplates(class_id, template_id);
-                                    for (int l = 0; l < (int)templates[0].features.size(); ++l)
+                                    vector <cv::line_rgb::Feature> all_features;
+                                    all_features.insert(all_features.end(), templates[0].features_border.begin(),
+                                            templates[0].features_border.end());
+                                    all_features.insert(all_features.end(), templates[0].features_inside.begin(),
+                                            templates[0].features_inside.end());
+                                    for (int l = 0; l < (int)all_features.size(); ++l)
                                     {
                                       cv::Scalar colorT;
-                                      cv::line_rgb::Feature f = templates[0].features[l];
+                                      cv::line_rgb::Feature f = all_features[l];
                                       cv::Point pt(f.x + bb.x, f.y +bb.y);
                                       switch(f.rgb_label)
                                       {
@@ -791,10 +797,16 @@ void drawResponseLineRGB(const std::vector<cv::line_rgb::Template>& templates,
     cv::Scalar colorT;
     for (int m = 0; m < num_modalities; ++m) {
 
-        int n_total_features = templates[m].features.size() + templates[m].color_features.size();
+        vector <cv::line_rgb::Feature> all_features;
+        all_features.insert(all_features.end(), templates[m].features_border.begin(),
+                templates[m].features_border.end());
+        all_features.insert(all_features.end(), templates[m].features_inside.begin(),
+                templates[m].features_inside.end());
+
+        int n_total_features = all_features.size() + templates[m].color_features.size();
         vector<cv::line_rgb::Feature> features;
-        features.insert(features.end(), templates[m].features.begin(),
-                templates[m].features.end());
+        features.insert(features.end(), all_features.begin(),
+                all_features.end());
         features.insert(features.end(), templates[m].color_features.begin(),
                 templates[m].color_features.end());
 

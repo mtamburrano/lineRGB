@@ -118,7 +118,8 @@ struct CV_EXPORTS Template
     int offsetX;
     int offsetY;
     int pyramid_level;
-    std::vector<Feature> features;
+    std::vector<Feature> features_inside;
+    std::vector<Feature> features_border;
     std::vector<Feature> color_features;
     int total_candidates;
     void read(const FileNode& fn);
