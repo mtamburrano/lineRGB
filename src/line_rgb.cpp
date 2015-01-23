@@ -70,14 +70,31 @@
 #include "opencv2/imgproc/imgproc.hpp"
 #include "opencv2/imgproc/imgproc_c.h"
 #include "opencv2/core/core_c.h"
-#include "opencv2/core/internal.hpp"
+//#include "opencv2/core/internal.hpp"
 #include "opencv2/features2d/features2d.hpp"
 #include "opencv2/calib3d/calib3d.hpp"
 #include <iomanip>
 #include <cmath>
 
+//#define  SQR(a)      ((a) * (a))
+
+double SQR(double a)
+{
+  return a*a;
+}
+float SQR(float a)
+{
+  return a*a;
+}
+int SQR(int a)
+{
+  return a*a;
+}
+
 
 //#include "opencv2/objdetect/objdetect_tegra.hpp"
+
+using namespace std;
 
 namespace cv {
 namespace line_rgb {
@@ -302,16 +319,19 @@ void QuantizedPyramid::selectScatteredFeatures(
         const std::vector<Candidate>& candidates,
         std::vector<Feature>& features, size_t num_features, float distance) {
     features.clear();
-    float distance_sq = CV_SQR(distance);
+    float distance_sq = SQR(distance);
     int i = 0;
+    int g = 5;
+    cout<<"G: "<<g<<" - SQR(G): "<<SQR(g)<<endl;
+    cout<<"candidates.size(): "<<candidates.size()<<endl;
     while (features.size() < num_features) {
         Candidate c = candidates[i];
-
+cout<<"features.size(): "<<features.size()<<" - num_features: "<<num_features<<"candidates.size(): "<<candidates.size()<<endl;
         // Add if sufficient distance away from any previously chosen feature
         bool keep = true;
         for (int j = 0; (j < (int) features.size()) && keep; ++j) {
             Feature f = features[j];
-            keep = CV_SQR(c.f.x - f.x) + CV_SQR(c.f.y - f.y) >= distance_sq;
+            keep = SQR(c.f.x - f.x) + SQR(c.f.y - f.y) >= distance_sq;
         }
         if (keep)
             features.push_back(c.f);
@@ -320,18 +340,21 @@ void QuantizedPyramid::selectScatteredFeatures(
             // Start back at beginning, and relax required distance
             i = 0;
             distance -= 1.0f;
-            distance_sq = CV_SQR(distance);
+            distance_sq = SQR(distance);
         }
     }
 }
 
 Ptr<Modality> Modality::create(const std::string& modality_type, bool use_hsv) {
+    if(modality_type != "ColorGradient" && modality_type != "DepthNormal")
+    {
+      cout<<"modality can only be ColorGradient or DepthNormal"<<endl;
+      CV_Assert(false);
+    }
     if (modality_type == "ColorGradient")
-        return new ColorGradient(use_hsv);
-    else if (modality_type == "DepthNormal")
-        return new DepthNormal();
-    else
-        return NULL;
+        return makePtr<ColorGradient>(use_hsv);
+    else //(modality_type == "DepthNormal")
+        return makePtr<DepthNormal>();
 }
 
 Ptr<Modality> Modality::create(const FileNode& fn, bool use_hsv) {
@@ -579,9 +602,9 @@ void quantizedOrientations(const Mat& src, Mat& magnitude, Mat& angle, Mat& colo
         for (int i = 0; i < length0; i += 3) {
 
             // Use the gradient orientation of the channel whose magnitude is largest
-            int mag1 = CV_SQR(ptrx[i]) + CV_SQR(ptry[i]);
-            int mag2 = CV_SQR(ptrx[i + 1]) + CV_SQR(ptry[i + 1]);
-            int mag3 = CV_SQR(ptrx[i + 2]) + CV_SQR(ptry[i + 2]);
+            int mag1 = SQR(ptrx[i]) + SQR(ptry[i]);
+            int mag2 = SQR(ptrx[i + 1]) + SQR(ptry[i + 1]);
+            int mag3 = SQR(ptrx[i + 2]) + SQR(ptry[i + 2]);
 
             if (mag1 >= mag2 && mag1 >= mag3) {
                 ptr0x[ind] = ptrx[i];
@@ -638,8 +661,8 @@ void quantizedOrientations(const Mat& src, Mat& magnitude, Mat& angle, Mat& colo
 
     // Calculate the final gradient orientations
     phase(sobel_dx, sobel_dy, sobel_ag, true);
-    hysteresisGradient(magnitude, angle, sobel_ag, CV_SQR(w_threshold),
-            CV_SQR(s_threshold), compute_magnitude_strong, magnitude_strong);
+    hysteresisGradient(magnitude, angle, sobel_ag, SQR(w_threshold),
+            SQR(s_threshold), compute_magnitude_strong, magnitude_strong);
 
 }
 
@@ -963,6 +986,7 @@ uchar votesRgbMag(int c, int r, float mag_center, uchar p_angle, const Mat& rgb,
 
 bool ColorGradientPyramid::extractTemplate(Template& templ) const {
     // Want features on the border to distinguish from background
+    cout<<"000C"<<endl;
     Mat local_mask;
     Mat border_mask;
 
@@ -983,7 +1007,7 @@ bool ColorGradientPyramid::extractTemplate(Template& templ) const {
     std::vector < Candidate > candidates_inside;
     std::vector < Candidate > candidates_color_features;
     bool no_mask = local_mask.empty();
-    float threshold_sq = CV_SQR(strong_threshold);
+    float threshold_sq = SQR(strong_threshold);
 
     int quantCount = 0;
 
@@ -992,8 +1016,8 @@ bool ColorGradientPyramid::extractTemplate(Template& templ) const {
     Point central_mass(moms.m10 / moms.m00, moms.m01 / moms.m00);
     float mask_area = moms.m00;
     //TODO the color features should be chosen proportional to the mask area
-    //float num_color_features = mask_area / 40;
-    float num_color_features = num_features;
+    float num_color_features = mask_area / 40;
+    //float num_color_features = num_features;
 
     int on_borderCount = 0;
 
@@ -1050,17 +1074,19 @@ bool ColorGradientPyramid::extractTemplate(Template& templ) const {
         }
 
     }
-
+cout<<"000C-0"<<endl;
     templ.total_candidates = quantCount;
 
     // We require a certain number of features
     if (candidates_border.size() + candidates_inside.size() < num_features)
         return false;
+    if (candidates_color_features.size() < num_color_features)
+        return false;
     // NOTE: Stable sort to agree with old code, which used std::list::sort()
     std::stable_sort(candidates_border.begin(), candidates_border.end());
     std::stable_sort(candidates_inside.begin(), candidates_inside.end());
     std::stable_sort(candidates_color_features.begin(), candidates_color_features.end());
-
+cout<<"000C-1"<<endl;
     // Use heuristic based on surplus of candidates in narrow outline for initial distance threshold
     int div_param = 1;
     if(only_border == false)
@@ -1068,13 +1094,13 @@ bool ColorGradientPyramid::extractTemplate(Template& templ) const {
     float distance = static_cast<float>(candidates_border.size() / (num_features/div_param) + 1);
     //float color_distance = sqrtf(static_cast<float>(mask_area)) / sqrtf(static_cast<float>(num_color_features)) + 1.5f;
     float color_distance = distance;
-
-    selectScatteredFeatures(candidates_color_features, templ.color_features, num_color_features, color_distance);
-
-    selectScatteredFeatures(candidates_border, templ.features_border, ceil(num_features/div_param), distance);
-
-    selectScatteredFeatures(candidates_inside, templ.features_inside, floor(num_features/div_param), distance);
-
+cout<<"000C-2"<<endl;
+    selectScatteredFeatures(candidates_color_features, templ.color_features, std::min((int)candidates_color_features.size(), (int)num_color_features), color_distance);
+cout<<"000C-3"<<endl;
+    selectScatteredFeatures(candidates_border, templ.features_border, std::min((int)candidates_border.size(), (int)ceil(num_features/div_param)), distance);
+cout<<"000C-4"<<endl;
+    selectScatteredFeatures(candidates_inside, templ.features_inside, std::min((int)candidates_inside.size(), (int)floor(num_features/div_param)), distance);
+cout<<"000C-5"<<endl;
     // Size determined externally, needs to match templates for other modalities
     templ.width = -1;
     templ.height = -1;
@@ -1107,7 +1133,7 @@ std::string ColorGradient::name() const {
 
 Ptr<QuantizedPyramid> ColorGradient::processImpl(const Mat& src,
         const Mat& mask) const {
-    return new ColorGradientPyramid(src, mask, weak_threshold, num_features,
+    return makePtr<ColorGradientPyramid>(src, mask, weak_threshold, num_features,
             strong_threshold, threshold_rgb, use_HSV);
 }
 
@@ -1371,6 +1397,7 @@ void DepthNormalPyramid::quantizeRGB(Mat& dst) const {
 
 bool DepthNormalPyramid::extractTemplate(Template& templ) const {
     // Features right on the object border are unreliable
+    cout<<"000D"<<endl;
     Mat local_mask;
     if (!mask.empty()) {
         erode(mask, local_mask, Mat(), Point(-1, -1), 2, BORDER_REPLICATE);
@@ -1464,7 +1491,7 @@ std::string DepthNormal::name() const {
 
 Ptr<QuantizedPyramid> DepthNormal::processImpl(const Mat& src,
         const Mat& mask) const {
-    return new DepthNormalPyramid(src, mask, distance_threshold,
+    return makePtr<DepthNormalPyramid>(src, mask, distance_threshold,
             difference_threshold, num_features, extract_threshold);
 }
 
@@ -1573,7 +1600,7 @@ void spread(const Mat& src, Mat& dst, int T) {
 }
 
 // Auto-generated by create_similarity_lut.py
-CV_DECL_ALIGNED(16) static const unsigned char SIMILARITY_LUT[256] = {0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4, 0, 0, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 0, 3, 4, 4, 3, 3, 4, 4, 2, 3, 4, 4, 3, 3, 4, 4, 0, 1, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 0, 2, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 0, 2, 1, 2, 0, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 0, 1, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 0, 3, 2, 3, 1, 3, 2, 3, 0, 3, 2, 3, 1, 3, 2, 3, 0, 0, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4, 0, 1, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 0, 3, 4, 4, 3, 3, 4, 4, 2, 3, 4, 4, 3, 3, 4, 4, 0, 2, 1, 2, 0, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 0, 2, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 0, 3, 2, 3, 1, 3, 2, 3, 0, 3, 2, 3, 1, 3, 2, 3, 0, 1, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4};
+static const unsigned char SIMILARITY_LUT[256] = {0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4, 0, 0, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 0, 3, 4, 4, 3, 3, 4, 4, 2, 3, 4, 4, 3, 3, 4, 4, 0, 1, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 0, 2, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 0, 2, 1, 2, 0, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 0, 1, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 0, 3, 2, 3, 1, 3, 2, 3, 0, 3, 2, 3, 1, 3, 2, 3, 0, 0, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4, 0, 1, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 0, 3, 4, 4, 3, 3, 4, 4, 2, 3, 4, 4, 3, 3, 4, 4, 0, 2, 1, 2, 0, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 0, 2, 3, 3, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 0, 3, 2, 3, 1, 3, 2, 3, 0, 3, 2, 3, 1, 3, 2, 3, 0, 1, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4};
 
 static const unsigned char SIMILARITY_RGB_LUT[8][256] = { { 0, 15, 0, 15, 0, 15,
         0, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2,
@@ -2597,7 +2624,7 @@ struct RejectedPredicate {
 };
 
 void Detector::match(const std::vector<Mat>& sources, float threshold,
-        std::vector<Match>& matches, const std::vector<std::string>& class_ids,
+        std::vector<Match>& matches, const std::vector<cv::String>& class_ids,
         OutputArrayOfArrays quantized_images,
         bool only_non_border_color_features,
         const std::vector<Mat>& masks) const {
@@ -3057,8 +3084,9 @@ int Detector::addTemplate(const std::vector<Mat>& sources,
                 qp->pyrDown();
 
             }
+            cout<<"000"<<endl;
             bool success = qp->extractTemplate(tp[l * num_modalities + i]);
-
+            cout<<"111"<<endl;
             if (!success)
                 return -1;
         }
@@ -3106,8 +3134,8 @@ int Detector::numTemplates(const std::string& class_id) const {
     return static_cast<int>(i->second.size());
 }
 
-std::vector<std::string> Detector::classIds() const {
-    std::vector < std::string > ids;
+std::vector<cv::String> Detector::classIds() const {
+    std::vector < cv::String > ids;
     TemplatesMap::const_iterator i = class_templates.begin(), iend =
             class_templates.end();
     for (; i != iend; ++i) {
@@ -3249,12 +3277,12 @@ static const int T_DEFAULTS[] = { 5, 8 };
 
 Ptr<Detector> getDefaultLINERGB(const bool use_HSV, const bool color_features_enabled) {
     std::vector < Ptr<Modality> > modalities;
-    modalities.push_back(new ColorGradient(use_HSV));
+    modalities.push_back(makePtr<ColorGradient>(use_HSV));
 
     if(use_HSV == true)
         import_similarity_csv();
 
-    return new Detector(modalities,
+    return makePtr<Detector>(modalities,
             std::vector<int>(T_DEFAULTS, T_DEFAULTS + 2),
             color_features_enabled);
 }
@@ -3262,13 +3290,13 @@ Ptr<Detector> getDefaultLINERGB(const bool use_HSV, const bool color_features_en
 Ptr<Detector> getDefaultLINEMODRGB(const bool use_HSV, const bool color_features_enabled) {
 
     std::vector < Ptr<Modality> > modalities;
-    modalities.push_back(new ColorGradient(use_HSV));
-    modalities.push_back(new DepthNormal);
+    modalities.push_back(makePtr<ColorGradient>(use_HSV));
+    modalities.push_back(makePtr<DepthNormal>());
 
     if(use_HSV == true)
             import_similarity_csv();
 
-    return new Detector(modalities,
+    return makePtr<Detector>(modalities,
             std::vector<int>(T_DEFAULTS, T_DEFAULTS + 2),
             color_features_enabled);
 }

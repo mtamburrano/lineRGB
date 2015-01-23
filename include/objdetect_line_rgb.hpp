@@ -67,6 +67,7 @@
 #include "opencv2/core/core.hpp"
 #include "opencv2/features2d/features2d.hpp"
 #include "emmintrin.h"
+#include <map>
 #include <cstdio>
 #include <iostream>
 #include <fstream>
@@ -114,7 +115,7 @@ struct CV_EXPORTS Template
 {
     int width;
     int height;
-    vector<Point> contour;
+    std::vector<Point> contour;
     int offsetX;
     int offsetY;
     int pyramid_level;
@@ -415,7 +416,7 @@ public:
      *                       empty or the same size as its corresponding source.
      */
     void match(const std::vector<Mat>& sources, float threshold, std::vector<Match>& matches,
-            const std::vector<std::string>& class_ids = std::vector<std::string>(),
+            const std::vector<cv::String>& class_ids = std::vector<cv::String>(),
             OutputArrayOfArrays quantized_images = noArray(),
             bool only_non_border_color = false,
             const std::vector<Mat>& masks = std::vector<Mat>()) const;
@@ -468,7 +469,7 @@ public:
     int numTemplates(const std::string& class_id) const;
     int numClasses() const {return static_cast<int>(class_templates.size());}
 
-    std::vector<std::string> classIds() const;
+    std::vector<cv::String> classIds() const;
 
     void read(const FileNode& fn);
     void write(FileStorage& fs, bool use_hsv) const;

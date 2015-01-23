@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8)
 
 find_package(OpenCV REQUIRED)
-include_directories (/usr/local/include/libfreenect/ ${OpenCV_INCLUDE_DIR} )
+include_directories (${OpenCV_INCLUDE_DIR} )
 
 link_directories (${cvimpulso_SOURCE_DIR}/lib)
 

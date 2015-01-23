@@ -4,7 +4,6 @@
  *  Created on: May 15, 2013
  *      Author: manuele
  */
-#include "libfreenect.hpp"
 
 #include <iterator>
 #include <set>
@@ -15,9 +14,13 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/imgproc/imgproc_c.h>
 #include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/imgcodecs/imgcodecs.hpp>
 #include <opencv2/highgui/highgui.hpp>
-#include <opencv2/objdetect/objdetect.hpp>
+//#include <opencv2/objdetect/objdetect.hpp>
+#include <opencv2/rgbd/linemod.hpp>
 #include "objdetect_line_rgb.hpp"
+
+#include <libfreenect/libfreenect.hpp>"
 
 #include <dirent.h>
 #include <unistd.h>
@@ -311,7 +314,7 @@ class MyFreenectDevice : public Freenect::FreenectDevice {
 // Functions to store detector and templates in single XML/YAML file
 static cv::Ptr<cv::linemod::Detector> readLinemod(const std::string& filename)
 {
-  cv::Ptr<cv::linemod::Detector> detector = new cv::linemod::Detector;
+  cv::Ptr<cv::linemod::Detector> detector = makePtr<cv::linemod::Detector>();
   cv::FileStorage fs(filename, cv::FileStorage::READ);
   detector->read(fs.root());
 
@@ -324,7 +327,7 @@ static cv::Ptr<cv::linemod::Detector> readLinemod(const std::string& filename)
 
 // Functions to store detector and templates in single XML/YAML file
 cv::Ptr<cv::line_rgb::Detector> readLineRGB(const std::string& filename) {
-    cv::Ptr < cv::line_rgb::Detector > detector = new cv::line_rgb::Detector;
+    cv::Ptr < cv::line_rgb::Detector > detector = makePtr<cv::line_rgb::Detector>();
     cv::FileStorage fs(filename, cv::FileStorage::READ);
     detector->read(fs.root());
 
@@ -340,7 +343,7 @@ void writeLineRGB(const cv::Ptr<cv::line_rgb::Detector>& detector,
     cv::FileStorage fs(filename, cv::FileStorage::WRITE);
     detector->write(fs, use_hsv);
 
-    std::vector < std::string > ids = detector->classIds();
+    std::vector < cv::String > ids = detector->classIds();
     fs << "classes" << "[";
     for (int i = 0; i < (int) ids.size(); ++i) {
         fs << "{";
@@ -502,27 +505,36 @@ int main(int argc, char * argv[])
   if(linemodrgb  == true || linergb == true)
       num_modalities = (int)detector_linergb->getModalities().size();
 
+/* //OPENCV capture
   // Open Kinect sensor
-//  cv::VideoCapture capture( CV_CAP_OPENNI );
-//  if (!capture.isOpened())
-//  {
-//    printf("Could not open OpenNI-capable sensor\n");
-//    return -1;
-//  }
-//  capture.set(CV_CAP_PROP_OPENNI_REGISTRATION, 1);
+   std::cout<<"INIT"<<endl;
+  cv::VideoCapture capture( CAP_OPENNI2 );
+   std::cout<<"INIT DONE"<<endl;
+  if (!capture.isOpened())
+  {
+    printf("Could not open OpenNI-capable sensor\n");
+    return -1;
+  }
+   std::cout<<"set da fare"<<endl;
+  capture.set(CAP_PROP_OPENNI_REGISTRATION, 1);
+ std::cout<<"grab settato"<<endl;
 
+  double focal_length = capture.get(CAP_OPENNI_DEPTH_GENERATOR_FOCAL_LENGTH);
+
+  if(alt_capture == true)
+      capture.release();
+*/
+
+ //FREENECT
   double focal_length = 575;//capture.get(CV_CAP_OPENNI_DEPTH_GENERATOR_FOCAL_LENGTH);
-
-  /*if(alt_capture == true)
-      capture.release();*/
-
   Freenect::Freenect freenect;
   MyFreenectDevice& device = freenect.createDevice<MyFreenectDevice>(0);
     device.startVideo();
     device.startDepth();
-    device.setAutoExposure(1);
-    device.setAutoWhiteBalance(0);
-    device.setColorCorrection(1);
+    //device.setAutoExposure(1);
+    //device.setAutoWhiteBalance(0);
+    //device.setColorCorrection(1);
+
 
   //printf("Focal length = %f\n", focal_length);
 
@@ -535,17 +547,18 @@ int main(int argc, char * argv[])
 
   for(;;)
   {
+ /*//OPENCV
+ std::cout<<"grab da fare"<<endl;
+        capture.grab();
+        std::cout<<"grab fatto"<<endl;
+        capture.retrieve(depth, CAP_OPENNI_DEPTH_MAP);
 
-//        capture.grab();
-//        capture.retrieve(depth, CV_CAP_OPENNI_DEPTH_MAP);
-//
-//        std::cout<<"rows: "<<depth.rows<<" -cols: "<< depth.cols<<" - type: "<<depth.type()<<" - elemsize: "<<depth.elemSize()<< " - elemsize1: "<<depth.elemSize1()<<std::endl;
-//
-//        capture.retrieve(color, CV_CAP_OPENNI_BGR_IMAGE);
+        std::cout<<"rows: "<<depth.rows<<" -cols: "<< depth.cols<<" - type: "<<depth.type()<<" - elemsize: "<<depth.elemSize()<< " - elemsize1: "<<depth.elemSize1()<<std::endl;
 
+        capture.retrieve(color, CAP_OPENNI_BGR_IMAGE);
+*/
 
-
-//std::cout<<"passo di qui"<<std::endl;
+ //FREENECT
     device.getVideo(color);
     device.getDepth(depth);
     //std::cout<<"rows: "<<depth.rows<<" -cols: "<< depth.cols<<" - type: "<<depth.type()<<" - elemsize: "<<depth.elemSize()<< " - elemsize1: "<<depth.elemSize1()<<std::endl;
@@ -615,11 +628,12 @@ int main(int argc, char * argv[])
             std::vector<cv::Mat> sources_color_resized_rotated;
             std::vector<cv::Mat> sources_depth_resized_rotated;
             std::vector<cv::Mat> mask_resized_rotated;
-
+std::cout<<" - 1 - "<<endl;
             resize_and_rotate(sources, mask, sources_color_resized_rotated, mask_resized_rotated, sources_depth_resized_rotated, num_modalities);
-
+std::cout<<" - 2 - "<<endl;
             for(int it_res_rot = 0; it_res_rot < sources_color_resized_rotated.size(); ++it_res_rot)
             {
+              std::cout<<" - it: "<<it_res_rot<<"/"<<sources_color_resized_rotated.size()<<endl;
                 std::vector<cv::Mat> tmp_sources;
                 tmp_sources.push_back(sources_color_resized_rotated[it_res_rot]);
                 if(num_modalities == 2)
@@ -630,7 +644,11 @@ int main(int argc, char * argv[])
                 if(linemod  == true || line2d == true)
                     template_id = detector_linemod->addTemplate(tmp_sources, class_id, mask_resized_rotated[it_res_rot], &bb);
                 if(linemodrgb  == true || linergb == true)
+                {
+                  std::cout<<" - 00 - "<<endl;
                     template_id = detector_linergb->addTemplate(tmp_sources, class_id, mask_resized_rotated[it_res_rot], &bb);
+                  std::cout<<" - 11 - "<<endl;
+                }
                 extract_timer.stop();
                 if (template_id != -1)
                 {
@@ -640,10 +658,10 @@ int main(int argc, char * argv[])
                 }
             }
         }
-
+std::cout<<" - 3 - "<<endl;
         ++num_classes;
       }
-
+std::cout<<" - 4 - "<<endl;
       // Draw ROI for display
       cv::rectangle(display, pt1, pt2, CV_RGB(0,0,0), 3);
       cv::rectangle(display, pt1, pt2, CV_RGB(255,255,0), 1);

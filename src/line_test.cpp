@@ -7,8 +7,10 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/imgproc/imgproc_c.h>
 #include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/imgcodecs/imgcodecs.hpp>
 #include <opencv2/highgui/highgui.hpp>
-#include <opencv2/objdetect/objdetect.hpp>
+//#include <opencv2/objdetect/objdetect.hpp>
+#include <opencv2/rgbd/linemod.hpp>
 #include "objdetect_line_rgb.hpp"
 
 #include <dirent.h>
@@ -363,7 +365,7 @@ int main(int argc, char * argv[]) {
                     cv::Mat single_source;
                     single_source = cv::imread(template_image, 1);
                     cv::Mat single_sourceDepth;
-                    single_sourceDepth = cv::imread(depth_image, CV_LOAD_IMAGE_ANYDEPTH | CV_LOAD_IMAGE_ANYCOLOR );
+                    single_sourceDepth = cv::imread(depth_image, IMREAD_ANYDEPTH | IMREAD_ANYCOLOR );
                     single_sourceDepth.convertTo(single_sourceDepth, CV_16S);
 
                     for (int iter = 0; iter < resizes.size(); iter++) {
@@ -553,7 +555,7 @@ int main(int argc, char * argv[]) {
             cout << endl << filename << " saved" << endl;
         }
 
-        std::vector < std::string > ids;
+        std::vector < cv::String > ids;
         if (linergb == true) {
             ids = detector_rgb->classIds();
             num_classes = detector_rgb->numClasses();
@@ -602,7 +604,7 @@ int main(int argc, char * argv[]) {
                 sources.push_back(color);
 
                 if (num_modalities == 2) {
-                    depth = cv::imread(roi_depth_image, CV_LOAD_IMAGE_ANYDEPTH | CV_LOAD_IMAGE_ANYCOLOR );
+                    depth = cv::imread(roi_depth_image, IMREAD_ANYDEPTH | IMREAD_ANYCOLOR );
                     depth.convertTo(depth, CV_16S);
                     sources.push_back(depth);
                 }
@@ -613,7 +615,7 @@ int main(int argc, char * argv[]) {
                 if (linergb == true) {
                     // Perform matching
                     vector < cv::line_rgb::Match > matches;
-                    vector < std::string > class_ids;
+                    vector < cv::String > class_ids;
                     vector < cv::Mat > quantized_images;
                     Timer match_timer;
                     match_timer.start();
@@ -661,7 +663,7 @@ int main(int argc, char * argv[]) {
 
                 } else if (line2d == true) {
                     vector < cv::linemod::Match > matches;
-                    vector < std::string > class_ids;
+                    vector < cv::String > class_ids;
                     vector < cv::Mat > quantized_images;
                     Timer match_timer;
                     match_timer.start();
@@ -708,7 +710,7 @@ int main(int argc, char * argv[]) {
                 }
                 else if (linemodrgb == true) {
                     vector < cv::line_rgb::Match > matches;
-                    vector < std::string > class_ids;
+                    vector < cv::String > class_ids;
                     vector < cv::Mat > quantized_images;
                     Timer match_timer;
                     match_timer.start();
@@ -758,7 +760,7 @@ int main(int argc, char * argv[]) {
                 if (current == 1)
                     waitKey(0);
 
-                char key = (char) cvWaitKey(10);
+                char key = (char) cv::waitKey(10);
                 switch (key) {
                 case 'w':
                     // write model to disk
@@ -874,7 +876,7 @@ void drawResponseLine2D(const std::vector<cv::linemod::Template>& templates,
 
 // Functions to store detector and templates in single XML/YAML file
 cv::Ptr<cv::line_rgb::Detector> readLineRGB(const std::string& filename) {
-    cv::Ptr < cv::line_rgb::Detector > detector = new cv::line_rgb::Detector;
+    cv::Ptr < cv::line_rgb::Detector > detector = cv::makePtr<cv::line_rgb::Detector>();
     cv::FileStorage fs(filename, cv::FileStorage::READ);
     detector->read(fs.root());
 
@@ -890,7 +892,7 @@ void writeLineRGB(const cv::Ptr<cv::line_rgb::Detector>& detector,
     cv::FileStorage fs(filename, cv::FileStorage::WRITE);
     detector->write(fs, use_hsv);
 
-    std::vector < std::string > ids = detector->classIds();
+    std::vector < cv::String > ids = detector->classIds();
     fs << "classes" << "[";
     for (int i = 0; i < (int) ids.size(); ++i) {
         fs << "{";
@@ -903,7 +905,7 @@ void writeLineRGB(const cv::Ptr<cv::line_rgb::Detector>& detector,
 
 // Functions to store detector and templates in single XML/YAML file
 static cv::Ptr<cv::linemod::Detector> readLine2D(const std::string& filename) {
-    cv::Ptr < cv::linemod::Detector > detector = new cv::linemod::Detector;
+    cv::Ptr < cv::linemod::Detector > detector = cv::makePtr<cv::linemod::Detector>();
     cv::FileStorage fs(filename, cv::FileStorage::READ);
     detector->read(fs.root());
 
