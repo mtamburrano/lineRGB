@@ -1056,6 +1056,8 @@ bool ColorGradientPyramid::extractTemplate(Template& templ) const {
     // We require a certain number of features
     if (candidates_border.size() + candidates_inside.size() < num_features)
         return false;
+    if (candidates_color_features.size() < num_color_features)
+        return false;
     // NOTE: Stable sort to agree with old code, which used std::list::sort()
     std::stable_sort(candidates_border.begin(), candidates_border.end());
     std::stable_sort(candidates_inside.begin(), candidates_inside.end());
