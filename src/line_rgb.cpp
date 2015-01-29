@@ -64,6 +64,8 @@
  *   	      Stefano Fabri (s.fabri@email.it), Rome, Italy
  */
 
+//#define __ARM_NEON__
+
 #include "objdetect_line_rgb.hpp"
 #include <limits>
 #include "opencv2/highgui/highgui.hpp"
@@ -75,6 +77,22 @@
 #include "opencv2/calib3d/calib3d.hpp"
 #include <iomanip>
 #include <cmath>
+
+#ifdef __i386__
+	#define SIMDPP_ARCH_X86_SSE3
+#endif
+
+#ifdef __arm__
+	#define SIMDPP_ARCH_ARM_NEON
+#endif
+
+
+
+#include <simdpp/simd.h>
+#include <simdpp/simd/bitwise.h>
+#include <simdpp/simd/types.h>
+
+
 
 //#define  SQR(a)      ((a) * (a))
 
@@ -95,9 +113,11 @@ int SQR(int a)
 //#include "opencv2/objdetect/objdetect_tegra.hpp"
 
 using namespace std;
+using namespace simdpp;
 
 namespace cv {
 namespace line_rgb {
+
 
 
 void writeMat(Mat m, string name, int n)
@@ -1517,8 +1537,60 @@ void DepthNormal::write(FileStorage& fs) const {
 *                                 Response maps                                          *
  \****************************************************************************************/
 
+
+
+
 void orUnaligned8u(const uchar * src, const int src_stride, uchar * dst,
         const int dst_stride, const int width, const int height) {
+			
+    bool src_aligned = reinterpret_cast<unsigned long long>(src) % 16 == 0;
+
+
+    for (int r = 0; r < height; ++r) {
+        int c = 0;
+
+
+        // Use aligned loads if possible
+        if (src_aligned)
+        {
+            for (; c < width - 15; c += 16)
+            {
+                const uint8x16* src_ptr = reinterpret_cast<const uint8x16*>(src + c);
+                uint8x16* dst_ptr = reinterpret_cast<uint8x16*>(dst + c);
+                *dst_ptr = simdpp::bit_or(*dst_ptr, *src_ptr);
+            }
+        }
+
+        // Fall back to MOVDQU
+        else
+        {
+            for (; c < width - 15; c += 16)
+            {
+                uint8x16 val;
+                load_u(val, reinterpret_cast<const uint8x16*>(src + c));
+                uint8x16* dst_ptr = reinterpret_cast<uint8x16*>(dst + c);
+                *dst_ptr = simdpp::bit_or(*dst_ptr, val);
+            }
+        }
+
+
+        for (; c < width; ++c)
+            dst[c] |= src[c];
+
+        // Advance to next row
+        src += src_stride;
+        dst += dst_stride;
+    }
+
+}
+
+
+
+
+/*
+void orUnaligned8u(const uchar * src, const int src_stride, uchar * dst,
+        const int dst_stride, const int width, const int height) {
+			
 #if CV_SSE2
     volatile bool haveSSE2 = checkHardwareSupport(CV_CPU_SSE2);
     volatile bool haveSSE3 = checkHardwareSupport(CV_CPU_SSE3);
@@ -1574,6 +1646,8 @@ void orUnaligned8u(const uchar * src, const int src_stride, uchar * dst,
     }
 
 }
+
+*/ 
 
 /**
  * \brief Spread binary labels in a quantized image.
@@ -1984,15 +2058,6 @@ void similarity(const std::vector<Mat>& linear_memories, const Template& templ,
     dst = Mat::zeros(H, W, CV_8U);
     uchar* dst_ptr = dst.ptr<uchar>();
 
-#if CV_SSE2
-    volatile bool haveSSE2 = checkHardwareSupport(CV_CPU_SSE2);
-#if CV_SSE3
-    volatile bool haveSSE3 = checkHardwareSupport(CV_CPU_SSE3);
-#endif
-#endif
-
-//haveSSE2 = false;
-//haveSSE3 = false;
     vector <cv::line_rgb::Feature> all_features;
     all_features.insert(all_features.end(), templ.features_border.begin(),
                 templ.features_border.end());
@@ -2014,6 +2079,7 @@ void similarity(const std::vector<Mat>& linear_memories, const Template& templ,
         // Now we do an aligned/unaligned add of dst_ptr and lm_ptr with template_positions elements
         int j = 0;
         // Process responses 16 at a time if vectorization possible
+/*
 #if CV_SSE2
 #if CV_SSE3
         if (haveSSE3)
@@ -2039,6 +2105,16 @@ void similarity(const std::vector<Mat>& linear_memories, const Template& templ,
             }
         }
 #endif
+*/
+
+		// Fall back to MOVDQU
+		for (; j < template_positions - 15; j += 16)
+		{
+			uint8x16 responses;
+			load_u(responses, reinterpret_cast<const uint8x16*>(lm_ptr + j));
+			uint8x16* dst_ptr_simd = reinterpret_cast<uint8x16*>(dst_ptr + j);
+			*dst_ptr_simd = simdpp::add(*dst_ptr_simd, responses);
+		}
 
         for (; j < template_positions; ++j)
             dst_ptr[j] += lm_ptr[j];
@@ -2095,10 +2171,6 @@ void similarityRGB(const std::vector<Mat>& linear_memories,
     //ptr to dst_rgb matrix if we are using more than 63 features
     ushort* dst_ptr_rgb_ushort = dst_rgb.ptr<ushort>();
 
-//#if CV_SSE2
-    volatile bool haveSSE2 = checkHardwareSupport(CV_CPU_SSE2);
-    volatile bool haveSSE3 = checkHardwareSupport(CV_CPU_SSE3);
-//#endif
 
     // Compute the similarity measure for this template by accumulating the contribution of
     // each feature
@@ -2153,6 +2225,7 @@ void similarityRGB(const std::vector<Mat>& linear_memories,
         int j = 0;
 
         // Process responses 8 at a time if vectorization possible
+/*
 #if CV_SSE2
 #if CV_SSE3
         if (haveSSE3)
@@ -2221,6 +2294,39 @@ void similarityRGB(const std::vector<Mat>& linear_memories,
             }
         }
 #endif
+*/
+
+		// Fall back to MOVDQU
+		for (; j < template_positions - 15; j += 16)
+		{
+			if(only_color_features == false)
+			{
+				uint8x16 v_aligned;
+				load_u(v_aligned, reinterpret_cast<const uint8x16*>(lm_ptr + j));
+				uint16x8 v_alignedLo = simdpp::zip_lo(simdpp::to_int16x8(v_aligned), uint16x8::zero());
+				uint16x8 v_alignedHi = simdpp::zip_hi(simdpp::to_int16x8(v_aligned), uint16x8::zero());
+
+				uint16x8* dst_ptr_simd = reinterpret_cast<uint16x8*>(dst_ptr_ushort + j);
+
+				dst_ptr_simd[0] = simdpp::add(dst_ptr_simd[0], v_alignedLo);
+				dst_ptr_simd[1] = simdpp::add(dst_ptr_simd[1], v_alignedHi);
+			}
+
+			if(only_gradient_features == false)
+			{
+				uint8x16 v_aligned_rgb;
+				load_u(v_aligned_rgb, reinterpret_cast<const uint8x16*>(lm_ptr_rgb + j));
+				uint16x8 v_alignedLo_rgb = simdpp::zip_lo(simdpp::to_int16x8(v_aligned_rgb), uint16x8::zero());
+				uint16x8 v_alignedHi_rgb = simdpp::zip_hi(simdpp::to_int16x8(v_aligned_rgb), uint16x8::zero());
+
+				uint16x8* dst_ptr_rgb_simd = reinterpret_cast<uint16x8*>(dst_ptr_rgb_ushort + j);
+
+				dst_ptr_rgb_simd[0] = simdpp::add(dst_ptr_rgb_simd[0], v_alignedLo_rgb);
+				dst_ptr_rgb_simd[1] = simdpp::add(dst_ptr_rgb_simd[1], v_alignedHi_rgb);
+			}
+
+		}
+
 
         for (; j < template_positions; ++j) {
             if (only_color_features == false)
@@ -2259,15 +2365,8 @@ void similarityLocal(const std::vector<Mat>& linear_memories,
     int offset_x = (center.x / T - 8) * T;
     int offset_y = (center.y / T - 8) * T;
 
-#if CV_SSE2
-    volatile bool haveSSE2 = checkHardwareSupport(CV_CPU_SSE2);
-#if CV_SSE3
-    volatile bool haveSSE3 = checkHardwareSupport(CV_CPU_SSE3);
-#endif
-    __m128i* dst_ptr_sse = dst.ptr<__m128i>();
-#endif
-//haveSSE2 = false;
-//haveSSE3 = false;
+    uint8x16* dst_ptr_simd = dst.ptr<uint8x16>();
+    
     vector <cv::line_rgb::Feature> all_features;
     all_features.insert(all_features.end(), templ.features_border.begin(),
                 templ.features_border.end());
@@ -2285,6 +2384,8 @@ void similarityLocal(const std::vector<Mat>& linear_memories,
         const uchar* lm_ptr = accessLinearMemory(linear_memories, f, T, W);
 
         // Process whole row at a time if vectorization possible
+        
+/*        
 #if CV_SSE2
 #if CV_SSE3
         if (haveSSE3)
@@ -2311,7 +2412,7 @@ void similarityLocal(const std::vector<Mat>& linear_memories,
         }
         else
 #endif
-        {
+	     {
             uchar* dst_ptr = dst.ptr<uchar>();
             for (int row = 0; row < 16; ++row) {
                 for (int col = 0; col < 16; ++col)
@@ -2320,6 +2421,15 @@ void similarityLocal(const std::vector<Mat>& linear_memories,
                 lm_ptr += W;
             }
         }
+
+*/
+		for (int row = 0; row < 16; ++row)
+		{
+			uint8x16 aligned;
+			load_u(aligned, reinterpret_cast<const uint8x16*>(lm_ptr));
+			dst_ptr_simd[row] = simdpp::add(dst_ptr_simd[row], aligned);
+			lm_ptr += W; // Step to next row
+		}
     }
 }
 
@@ -2357,15 +2467,12 @@ void similarityLocalRGB(const std::vector<Mat>& linear_memories,
     int offset_x = (center.x / T - 8) * T;
     int offset_y = (center.y / T - 8) * T;
 
-//#if CV_SSE2
-    volatile bool haveSSE2 = checkHardwareSupport(CV_CPU_SSE2);
-    volatile bool haveSSE3 = checkHardwareSupport(CV_CPU_SSE3);
-    //if(haveSSE2 || haveSSE3)
-    __m128i* dst_ptr_sse = dst.ptr<__m128i>();
-    __m128i* dst_ptr_rgb_sse = dst_rgb.ptr<__m128i>();
 
+    uint16x8* dst_ptr_simd = dst.ptr<uint16x8>();
+    uint16x8* dst_ptr_rgb_simd = dst_rgb.ptr<uint16x8>();
+    //uint8x16* dst_ptr_simd = dst.ptr<uint8x16>();
+    //uint8x16* dst_ptr_rgb_simd = dst_rgb.ptr<uint8x16>();
 
-//#endif
 
     int total_features_size, border_features_size;
     std::vector < cv::line_rgb::Feature > total_features;
@@ -2418,7 +2525,7 @@ void similarityLocalRGB(const std::vector<Mat>& linear_memories,
             lm_ptr_rgb = accessLinearMemoryRGB(linear_memories_rgb, f, T, W);
         }
         // Process whole row at a time if vectorization possible
-
+/*
 #if CV_SSE2
 #if CV_SSE3
         if (haveSSE3)
@@ -2515,6 +2622,41 @@ void similarityLocalRGB(const std::vector<Mat>& linear_memories,
             }
 
         }
+  */
+			
+			
+		for (int row = 0; row < 32; row+=2)
+		{
+			if(only_color_features == false)
+			{
+				uint8x16 v_aligned;
+				load_u(v_aligned, reinterpret_cast<const uint8x16*>(lm_ptr));
+				uint16x8 v_alignedLo = simdpp::zip_lo(simdpp::to_int16x8(v_aligned), uint16x8::zero());
+				uint16x8 v_alignedHi = simdpp::zip_hi(simdpp::to_int16x8(v_aligned), uint16x8::zero());
+
+				dst_ptr_simd[row] = simdpp::add(dst_ptr_simd[row], v_alignedLo);
+				dst_ptr_simd[row + 1] = simdpp::add(dst_ptr_simd[row + 1], v_alignedHi);
+
+				lm_ptr += W; // Step to next row
+			}
+
+			if (only_gradient_features == false)
+			{
+				uint8x16 v_aligned_rgb;
+				load_u(v_aligned_rgb, reinterpret_cast<const uint8x16*>(lm_ptr_rgb));
+				uint16x8 v_alignedLo_rgb = simdpp::zip_lo(simdpp::to_int16x8(v_aligned_rgb), uint16x8::zero());
+				uint16x8 v_alignedHi_rgb = simdpp::zip_hi(simdpp::to_int16x8(v_aligned_rgb), uint16x8::zero());
+
+				dst_ptr_rgb_simd[row] = simdpp::add(dst_ptr_rgb_simd[row], v_alignedLo_rgb);
+				dst_ptr_rgb_simd[row + 1] = simdpp::add(dst_ptr_rgb_simd[row + 1], v_alignedHi_rgb);
+
+				lm_ptr_rgb += W; // Step to next row
+			}
+		}
+
+        
+  
+  
 
     }
 

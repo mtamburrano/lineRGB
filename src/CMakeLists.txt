@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8)
 
 find_package(OpenCV REQUIRED)
-include_directories (${OpenCV_INCLUDE_DIR} )
+include_directories (${OpenCV_INCLUDE_DIR} /usr/local/include/libsimdpp-1.0 /usr/local/include/libfreenect /usr/local/include/libusb-1.0 )
 
 link_directories (${cvimpulso_SOURCE_DIR}/lib)
 

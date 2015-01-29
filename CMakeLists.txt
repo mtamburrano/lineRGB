@@ -180,7 +180,7 @@ endif()
 
 
 # High level of warnings.
-set(EXTRA_C_FLAGS "${EXTRA_C_FLAGS} -Wall -Wextra -std=c++0x -w") #-w to disable warnings # -Weffc++ -Wextra")
+set(EXTRA_C_FLAGS "${EXTRA_C_FLAGS} -Wall -Wextra -std=c++0x -w -mfpu=neon") #-w to disable warnings # -Weffc++ -Wextra")
 
 # The -Wno-long-long is required in 64bit systems when including sytem headers.
 if(${CMAKE_SYSTEM_PROCESSOR} MATCHES x86_64*)

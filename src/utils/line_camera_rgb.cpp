@@ -20,7 +20,8 @@
 #include <opencv2/rgbd/linemod.hpp>
 #include "objdetect_line_rgb.hpp"
 
-#include <libfreenect/libfreenect.hpp>"
+#include <libfreenect.hpp>
+#include <simdpp/simd.h>
 
 #include <dirent.h>
 #include <unistd.h>
@@ -534,6 +535,7 @@ int main(int argc, char * argv[])
     //device.setAutoExposure(1);
     //device.setAutoWhiteBalance(0);
     //device.setColorCorrection(1);
+    device.setFlag(FREENECT_AUTO_WHITE_BALANCE, false);
 
 
   //printf("Focal length = %f\n", focal_length);
@@ -563,6 +565,9 @@ int main(int argc, char * argv[])
     device.getDepth(depth);
     //std::cout<<"rows: "<<depth.rows<<" -cols: "<< depth.cols<<" - type: "<<depth.type()<<" - elemsize: "<<depth.elemSize()<< " - elemsize1: "<<depth.elemSize1()<<std::endl;
 
+	/*imshow("ao", color);
+	waitKey(1);
+	continue;*/
 
     std::vector<cv::Mat> sources;
     sources.push_back(color);
@@ -1500,7 +1505,7 @@ void drawResponseLineRGB(const std::vector<cv::line_rgb::Template>& templates,
                 if(f.on_border == false || only_non_border == false)
                     cv::circle(dst, pt, T / 2, colorT);
                 else
-                    cv::rectangle(dst,Point(pt.x-1, pt.y-1),cv::Point(pt.x+1, pt.y+1), CV_RGB(255, 255, 255));
+                    cv::rectangle(dst,Point(pt.x-1, pt.y-1),cv::Point(pt.x+1, pt.y+1), colorT);
             }
             //if(m == 1)
               //  cv::rectangle(dst,Point(pt.x, pt.y),cv::Point(pt.x+1, pt.y+1), CV_RGB(127, 127, 127));
