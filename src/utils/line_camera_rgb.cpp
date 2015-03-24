@@ -378,7 +378,7 @@ int main(int argc, char * argv[])
   bool show_timings = false;
   bool learn_online = false;
   int num_classes = 0;
-  int matching_threshold = 85;
+  int matching_threshold = 70;
   /// @todo Keys for changing these?
   cv::Size roi_size(130, 130);
   int learning_lower_bound = 85;
@@ -444,6 +444,7 @@ int main(int argc, char * argv[])
 
       }
 
+  bool COLOR_FEATURES = true;
   std::string hsv_string = "";
   if(hsv == true)
       hsv_string = "_hsv";
@@ -561,13 +562,21 @@ int main(int argc, char * argv[])
  //FREENECT
     device.getVideo(color);
     device.getDepth(depth);
-    //std::cout<<"rows: "<<depth.rows<<" -cols: "<< depth.cols<<" - type: "<<depth.type()<<" - elemsize: "<<depth.elemSize()<< " - elemsize1: "<<depth.elemSize1()<<std::endl;
+    //std::cout<<"depth) rows: "<<depth.rows<<" -cols: "<< depth.cols<<" - type: "<<depth.type()<<" - elemsize: "<<depth.elemSize()<< " - elemsize1: "<<depth.elemSize1()<<std::endl;
+    //std::cout<<"color) rows: "<<color.rows<<" -cols: "<< color.cols<<" - type: "<<color.type()<<" - elemsize: "<<color.elemSize()<< " - elemsize1: "<<color.elemSize1()<<std::endl;
 
+    /*	DEBUG UNA IMMAGINE
+     *
+     * color = imread("./image_00000.png", 1);
+    FileStorage fis("./depth_00000.yml", FileStorage::READ);
+    				fis["depth"] >> depth;
+    				depth.convertTo(depth, CV_16S);*/
 
     std::vector<cv::Mat> sources;
     sources.push_back(color);
-    if(num_modalities == 2)
+    if(num_modalities == 2) {
         sources.push_back(depth);
+    }
 
     cv::Mat display = color.clone();
 
@@ -895,7 +904,7 @@ std::cout<<" - 4 - "<<endl;
       printf("------------------------------------------------------------\n");
 
     cv::imshow("color", display);
-    cv::imshow("normals", quantized_images[1]);
+    cv::imshow("normals", quantized_images[0]);
 
     cv::FileStorage fs;
     char key = (char)cv::waitKey(10);

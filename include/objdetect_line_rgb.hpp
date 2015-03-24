@@ -76,6 +76,16 @@
 /****************************************************************************************\
 *                                 LINE-RGB		                                         *
  \****************************************************************************************/
+class TemplatesObject {
+public:
+	TemplatesObject() {};
+	virtual ~TemplatesObject() {};
+	std::string name;
+	std::vector <std::string> masks;
+	std::vector <std::string> depths;
+	std::vector <std::string> images;
+};
+
 
 namespace cv {
 namespace line_rgb {
