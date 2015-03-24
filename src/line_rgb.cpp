@@ -341,12 +341,9 @@ void QuantizedPyramid::selectScatteredFeatures(
     features.clear();
     float distance_sq = SQR(distance);
     int i = 0;
-    int g = 5;
-    cout<<"G: "<<g<<" - SQR(G): "<<SQR(g)<<endl;
-    cout<<"candidates.size(): "<<candidates.size()<<endl;
     while (features.size() < num_features) {
         Candidate c = candidates[i];
-cout<<"features.size(): "<<features.size()<<" - num_features: "<<num_features<<"candidates.size(): "<<candidates.size()<<endl;
+        //cout<<"features.size(): "<<features.size()<<" - num_features: "<<num_features<<"candidates.size(): "<<candidates.size()<<endl;
         // Add if sufficient distance away from any previously chosen feature
         bool keep = true;
         for (int j = 0; (j < (int) features.size()) && keep; ++j) {
@@ -1006,7 +1003,6 @@ uchar votesRgbMag(int c, int r, float mag_center, uchar p_angle, const Mat& rgb,
 
 bool ColorGradientPyramid::extractTemplate(Template& templ) const {
     // Want features on the border to distinguish from background
-    cout<<"000C"<<endl;
     Mat local_mask;
     Mat border_mask;
 
@@ -1094,11 +1090,15 @@ bool ColorGradientPyramid::extractTemplate(Template& templ) const {
         }
 
     }
-cout<<"000C-0"<<endl;
     templ.total_candidates = quantCount;
+    int div_param = 1;
+    if(only_border == false)
+        div_param = 2;
 
     // We require a certain number of features
-    if (candidates_border.size() + candidates_inside.size() < num_features)
+    if (candidates_border.size() < ceil(num_features/div_param))
+        return false;
+    if (candidates_inside.size() < floor(num_features/div_param))
         return false;
     if (candidates_color_features.size() < num_color_features)
         return false;
@@ -1106,21 +1106,14 @@ cout<<"000C-0"<<endl;
     std::stable_sort(candidates_border.begin(), candidates_border.end());
     std::stable_sort(candidates_inside.begin(), candidates_inside.end());
     std::stable_sort(candidates_color_features.begin(), candidates_color_features.end());
-cout<<"000C-1"<<endl;
     // Use heuristic based on surplus of candidates in narrow outline for initial distance threshold
-    int div_param = 1;
-    if(only_border == false)
-        div_param = 2;
+
     float distance = static_cast<float>(candidates_border.size() / (num_features/div_param) + 1);
     //float color_distance = sqrtf(static_cast<float>(mask_area)) / sqrtf(static_cast<float>(num_color_features)) + 1.5f;
     float color_distance = distance;
-cout<<"000C-2"<<endl;
-    selectScatteredFeatures(candidates_color_features, templ.color_features, std::min((int)candidates_color_features.size(), (int)num_color_features), color_distance);
-cout<<"000C-3"<<endl;
-    selectScatteredFeatures(candidates_border, templ.features_border, std::min((int)candidates_border.size(), (int)ceil(num_features/div_param)), distance);
-cout<<"000C-4"<<endl;
-    selectScatteredFeatures(candidates_inside, templ.features_inside, std::min((int)candidates_inside.size(), (int)floor(num_features/div_param)), distance);
-cout<<"000C-5"<<endl;
+    selectScatteredFeatures(candidates_color_features, templ.color_features, num_color_features, color_distance);
+    selectScatteredFeatures(candidates_border, templ.features_border, ceil(num_features/div_param), distance);
+    selectScatteredFeatures(candidates_inside, templ.features_inside, floor(num_features/div_param), distance);
     // Size determined externally, needs to match templates for other modalities
     templ.width = -1;
     templ.height = -1;
@@ -1417,7 +1410,6 @@ void DepthNormalPyramid::quantizeRGB(Mat& dst) const {
 
 bool DepthNormalPyramid::extractTemplate(Template& templ) const {
     // Features right on the object border are unreliable
-    cout<<"000D"<<endl;
     Mat local_mask;
     if (!mask.empty()) {
         erode(mask, local_mask, Mat(), Point(-1, -1), 2, BORDER_REPLICATE);
@@ -2991,7 +2983,7 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
 
             const Template& templ = tp[lowest_start + i];
             num_all_features += static_cast<int>(templ.features_border.size() + templ.features_inside.size());
-            num_color_features += static_cast<int>(templ.color_features.size());
+            num_color_features = static_cast<int>(templ.color_features.size());
             if (i == 0) //color modality, add rgb
                 similarityRGB(lowest_lm[i], lowest_lm_rgb[i], templ,
                         similarities[i], similarities_rgb[i], sizes.back(),
@@ -3086,7 +3078,7 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
                 for (int i = 0; i < (int) modalities.size(); ++i) {
                     const Template& templ = tp[start + i];
                     num_all_features += static_cast<int>(templ.features_border.size() + templ.features_inside.size());
-                    num_color_features += static_cast<int>(templ.color_features.size());
+                    num_color_features = static_cast<int>(templ.color_features.size());
                     if(i == 0)
                     {
                         num_gradient_features += static_cast<int>(templ.features_border.size() + templ.features_inside.size());
@@ -3109,16 +3101,16 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
                 addSimilarities(similarities_rgb, total_similarity_rgb);
 
                 // Find best local adjustment
-                int best_score = 0;
-                int best_score_rgb = 0;
-                int best_score_combined = 0;
+                float best_score = 0;
+                float best_score_rgb = 0;
+                float best_score_combined = 0;
                 int best_r = -1, best_c = -1;
                 for (int r = 0; r < total_similarity.rows; ++r) {
                     ushort* row = total_similarity.ptr < ushort > (r);
                     ushort* row_rgb = total_similarity_rgb.ptr < ushort > (r);
                     for (int c = 0; c < total_similarity.cols; ++c) {
-                        int score = row[c];
-                        int score_rgb = row_rgb[c];
+                    	float score = row[c];
+                    	float score_rgb = row_rgb[c];
 
                         score = (score * 100.f) / (4 * num_all_features);
 
@@ -3141,7 +3133,7 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
                             }
 
                         }
-                        int score_combined = (score + score_rgb) / 2;
+                        float score_combined = (score + score_rgb) / 2;
                         //ricordati di cambiare il matchpredicate!!!!!!!!!!!!!!
                         //int score_combined = ((score/100) * 80) + ((score_rgb/100)*20);
 
@@ -3226,9 +3218,7 @@ int Detector::addTemplate(const std::vector<Mat>& sources,
                 qp->pyrDown();
 
             }
-            cout<<"000"<<endl;
             bool success = qp->extractTemplate(tp[l * num_modalities + i]);
-            cout<<"111"<<endl;
             if (!success)
                 return -1;
         }
@@ -3296,6 +3286,7 @@ void Detector::read(const FileNode& fn) {
     bool use_hsv = (bool)((int)fn["use_hsv"]);
     pyramid_levels = fn["pyramid_levels"];
     fn["T"] >> T_at_level;
+    fn["color_features_enabled"] >> color_features_enabled;
 
     modalities.clear();
     FileNode modalities_fn = fn["modalities"];
@@ -3310,6 +3301,7 @@ void Detector::write(FileStorage& fs, bool use_hsv) const {
     fs << "use_hsv" << (int)use_hsv;
     fs << "pyramid_levels" << pyramid_levels;
     fs << "T" << T_at_level;
+    fs << "color_features_enabled" << color_features_enabled;
 
     fs << "modalities" << "[";
     for (int i = 0; i < (int) modalities.size(); ++i) {
