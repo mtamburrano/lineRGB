@@ -100,6 +100,14 @@ namespace cv {
 namespace line_rgb {
 
 
+string i2s(int number) {
+	stringstream ss;
+	ss << number;
+	string res;
+	ss >> res;
+	return res;
+}
+
 void writeMat(Mat m, string name, int n)
 {
     std::stringstream ss;
@@ -266,6 +274,7 @@ void Template::read(const FileNode& fn) {
     pyramid_level = fn["pyramid_level"];
     total_candidates = fn["total_candidates"];
     fn["contour"] >> contour;
+    fn["id_group"] >> id_group;
     FileNode features_border_fn = fn["features_border"];
     features_border.resize(features_border_fn.size());
     FileNodeIterator it_b = features_border_fn.begin(), it_end_b = features_border_fn.end();
@@ -294,6 +303,7 @@ void Template::write(FileStorage& fs) const {
     fs << "pyramid_level" << pyramid_level;
     fs << "total_candidates" << total_candidates;
     fs << "contour" << contour;
+    fs << "id_group" << id_group;
     fs << "features_border" << "[";
     for (int i = 0; i < (int) features_border.size(); ++i) {
         features_border[i].write(fs);
@@ -537,7 +547,7 @@ void quantizedOrientations(const Mat& src, Mat& magnitude, Mat& angle, Mat& colo
     if(hsv == true)
     {
         cvtColor(src,hsv_src,CV_BGR2HSV);
-        imshow("hsv", hsv_src);
+        //imshow("hsv", hsv_src);
         /*imshow("src", src);
         waitKey();*/
     }
@@ -1106,6 +1116,7 @@ bool ColorGradientPyramid::extractTemplate(Template& templ) const {
     templ.width = -1;
     templ.height = -1;
     templ.pyramid_level = pyramid_level;
+    templ.id_group = -1;
 
     return true;
 }
@@ -1467,6 +1478,7 @@ bool DepthNormalPyramid::extractTemplate(Template& templ) const {
     // Size determined externally, needs to match templates for other modalities
     templ.width = -1;
     templ.height = -1;
+    templ.id_group = -1;
     templ.pyramid_level = pyramid_level;
 
     return true;
@@ -3069,7 +3081,8 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
 
 int Detector::addTemplate(const std::vector<Mat>& sources,
         const std::string& class_id, const Mat& object_mask,
-        Rect* bounding_box) {
+        bool group_similar_templates, Rect* bounding_box) {
+
     int num_modalities = static_cast<int>(modalities.size());
     std::vector < TemplatePyramid > &template_pyramids =
             class_templates[class_id];
@@ -3099,6 +3112,40 @@ int Detector::addTemplate(const std::vector<Mat>& sources,
     Rect bb = cropTemplates(tp, object_mask);
     if (bounding_box)
         *bounding_box = bb;
+
+	int idg = -1;
+    //if group_similar_templates is enabled
+    if(group_similar_templates) {
+    	float matching_discarded = 95.0;
+    	float matching_same_group = 85.0;
+    	//if we don't have templates for this class_id yet, put 0 as id_group
+    	if(template_id == 0) {
+    		idg = 0;
+    	}
+    	else
+    	{
+    		vector<Match> matches;
+    		vector<cv::String> class_ids;
+    		class_ids.push_back(class_id);
+    		this->match(sources, matching_same_group, matches, class_ids);
+    		//if we found matches with matching_discarded+ score, ignore this template
+    		if(matches.size() > 0 && matches[0].similarity >= matching_discarded)
+    			return -1;
+    		//if we found matches with score matching_same_group<=score<matching_discarded, put the same id_group of first match
+    		if(matches.size() > 0 && matches[0].similarity >= matching_same_group) {
+    			const std::vector<cv::line_rgb::Template>& templates =this->getTemplates(matches[0].class_id, matches[0].template_id);
+    			idg = templates[0].id_group;
+    		}
+    		//else we have a new group and id_group is the same as templates_id
+    		else {
+    			idg = template_id;
+    		}
+    	}
+    }
+
+    //insert the right id_group
+    for(int i = 0; i<tp.size(); i++)
+    	tp[i].id_group = idg;
 
     /// @todo Can probably avoid a copy of tp here with swap
     template_pyramids.push_back(tp);

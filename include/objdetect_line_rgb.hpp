@@ -66,7 +66,7 @@
 
 #include "opencv2/core/core.hpp"
 #include "opencv2/features2d/features2d.hpp"
-#include "emmintrin.h"
+//#include "emmintrin.h"
 #include <map>
 #include <cstdio>
 #include <iostream>
@@ -129,6 +129,8 @@ struct CV_EXPORTS Template
     int offsetX;
     int offsetY;
     int pyramid_level;
+    //id_group is -1 if we don't care about it, or is the template_id of the first template of the same group
+    int id_group;
     std::vector<Feature> features_inside;
     std::vector<Feature> features_border;
     std::vector<Feature> color_features;
@@ -442,7 +444,7 @@ public:
      * \return Template ID, or -1 if failed to extract a valid template.
      */
     int addTemplate(const std::vector<Mat>& sources, const std::string& class_id,
-            const Mat& object_mask, Rect* bounding_box = NULL);
+            const Mat& object_mask, bool group_similar_templates, Rect* bounding_box = NULL);
 
     /**
      * \brief Add a new object template computed by external means.
@@ -477,6 +479,7 @@ public:
 
     int numTemplates() const;
     int numTemplates(const std::string& class_id) const;
+    //int numTemplateGroups() const;
     int numClasses() const {return static_cast<int>(class_templates.size());}
 
     std::vector<cv::String> classIds() const;
@@ -496,6 +499,11 @@ protected:
     int pyramid_levels;
     std::vector<int> T_at_level;
     bool color_features_enabled;
+    /*int num_template_groups;
+    //key: class_id+"_"+id_group  value: template_id;
+    std::map<std::string, int> groups_references;
+    //key: class_id  value: num of groups;
+    std::map<std::string, int> groups_count;*/
 
     typedef std::vector<Template> TemplatePyramid;
     typedef std::map<std::string, std::vector<TemplatePyramid> > TemplatesMap;

@@ -90,6 +90,15 @@ int stringToInt(string s) {
     return number;
 }
 
+string i2s(int number) {
+    stringstream ss;
+    string s;
+    ss << number;
+    ss >> s;
+
+    return s;
+}
+
 string charToString(char* c) {
     stringstream ss;
     string s;
@@ -354,6 +363,96 @@ void splitBySlash(string src, string& word1, string& word2) {
     word2 = tmp.substr(1, tmp.size() - 1);
 }
 
+bool sortbygid(pair<cv::line_rgb::Template, int> t1, pair<cv::line_rgb::Template, int> t2) {
+	return (t1.first.id_group < t2.first.id_group);
+}
+
+void do_check_groups(bool isLineRGB, string template_folder) {
+	string filename;
+	if(isLineRGB) {
+		filename = "line_rgb_templates.yml";
+	}
+	else {
+		filename = "linemod_rgb_templates.yml";
+	}
+
+	cv::Ptr<cv::line_rgb::Detector> detector_linergb = readLineRGB(filename);
+	std::vector < cv::String > ids = detector_linergb->classIds();
+	int num_classes = detector_linergb->numClasses();
+	cout<<"Loaded "<<filename<<" with "<<num_classes<<" classes and "<< detector_linergb->numTemplates()<<endl;
+	int num_modalities = detector_linergb->getModalities().size();
+	string pathof_templ_paths = "PATHS_"+filename;
+	FileStorage templ_paths(pathof_templ_paths, cv::FileStorage::READ);
+	cout << "reading "<<pathof_templ_paths<<endl;
+
+	for(int i = 0; i<ids.size(); i++) {
+		cv::String class_id = ids[i];
+		int num_templates = detector_linergb->numTemplates(class_id);
+		vector<pair<cv::line_rgb::Template, int> > sorted_bygid_templates;
+
+		for(int template_id = 0; template_id < num_templates; template_id++) {
+			std::vector<cv::line_rgb::Template> templates = detector_linergb->getTemplates(class_id, template_id);
+			sorted_bygid_templates.push_back(make_pair(templates[0], template_id));
+
+		}
+
+		sort(sorted_bygid_templates.begin(), sorted_bygid_templates.end(), sortbygid);
+		int id_group = -1;
+		int group_count = 0;
+		int num_groups = 0;
+		vector<string> group_paths;
+		for(int nt = 0; nt < sorted_bygid_templates.size(); nt++) {
+
+			pair<cv::line_rgb::Template, int> t = sorted_bygid_templates[nt];
+			int template_id = t.second;
+			cv::String index_template_path = class_id+"_"+i2s(template_id);
+			string template_path;
+			templ_paths[index_template_path] >> template_path;
+
+			if(id_group != t.first.id_group) {
+				if(id_group != -1) {
+					cout << "ID GROUP: " <<id_group<<endl;
+					cout << "       "<<group_count<< " elements" << endl;
+					for(int gp = 0; gp < group_paths.size(); gp++) {
+						cout << "             "<<group_paths[gp] << endl;
+					}
+
+				}
+				id_group = t.first.id_group;
+				group_count = 1;
+				num_groups++;
+				group_paths.clear();
+				group_paths.push_back(template_path);
+			}
+			else {
+				group_count++;
+				group_paths.push_back(template_path);
+			}
+
+			/*int template_id = t.second;
+			cv::String index_template_path = class_id+"_"+i2s(template_id);
+			string template_path;
+			templ_paths[index_template_path] >> template_path;
+
+			cout << index_template_path <<" template_path: "<<template_path<<endl;
+			Mat rgb = imread(template_path, 1);
+
+			//vector<cv::line_rgb::Template> template_to_draw;
+			//template_to_draw.push_back(t.first);
+			//drawResponseLineRGB(template_to_draw, num_modalities, rgb,
+			//		cv::Point(0, 0), 8, -1, class_id,
+			//		false);
+
+			cv::String name_window = class_id+"-GID_"+i2s(t.first.id_group);
+			imshow(name_window, rgb);
+			waitKey();*/
+
+		}
+		cout << "NUM GROUPS: " <<num_groups<<endl;
+
+	}
+}
+
 
 //////////////////MAIN///////////////////////
 
@@ -370,7 +469,10 @@ int main(int argc, char * argv[]) {
     bool hsv = false;
     bool rgb = false;
     bool only_non_border = false;
+    bool check_groups = false;
     bool help = false;
+
+    bool GROUP_SIMILAR_TEMPLATES = true;
 
     string path_name = "";
     string path_templates = "";
@@ -402,6 +504,9 @@ int main(int argc, char * argv[]) {
         if (strcmp("--no_border", argv[h]) == 0) {
             only_non_border = true;
         }
+        if (strcmp("--check_groups", argv[h]) == 0) {
+            check_groups = true;
+        }
         if (strcmp("-h", argv[h]) == 0) {
             help = true;
         }
@@ -412,6 +517,7 @@ int main(int argc, char * argv[]) {
         help_f();
         return 0;
     }
+
 
     if (line2d == true && linergb == true) {
         printf(
@@ -490,13 +596,21 @@ int main(int argc, char * argv[]) {
 
 	string filename;
 	if (linergb == true)
-		filename = "./line_rgb_templates.yml";
+		filename = "line_rgb_templates.yml";
 	if (line2d == true)
-		filename = "./line_2d_templates.yml";
+		filename = "line_2d_templates.yml";
 	if (linemod == true)
-		filename = "./linemod_templates.yml";
+		filename = "linemod_templates.yml";
 	if (linemodrgb == true)
-		filename = "./linemod_rgb_templates.yml";
+		filename = "linemod_rgb_templates.yml";
+
+	string pathof_templ_paths = "PATHS_"+filename;
+
+    if(check_groups == true) {
+    	do_check_groups(linergb, pathof_templ_paths);
+    	return -1;
+    }
+    FileStorage templ_paths(pathof_templ_paths, cv::FileStorage::WRITE);
 
 	for (int no = 0; no < num_objects; no++) {
 
@@ -537,13 +651,13 @@ int main(int argc, char * argv[]) {
 			{
 					template_id = detector_rgb->addTemplate(
 
-						sourcesTemplate, class_id, mask,
+						sourcesTemplate, class_id, mask, GROUP_SIMILAR_TEMPLATES,
 						&bb);
 			}
 			if (linemodrgb == true)
 			{
 				template_id = detector_linemodrgb->addTemplate(
-						sourcesTemplate, class_id, mask,
+						sourcesTemplate, class_id, mask, GROUP_SIMILAR_TEMPLATES,
 						&bb);
 			}
 			if (line2d == true)
@@ -636,24 +750,26 @@ int main(int argc, char * argv[]) {
 						<< ") for new object class " << class_id
 						<< " - path:" << t_object->images[ni] << "***"
 						<< endl;
+				templ_paths << class_id+"_"+i2s(template_id) << t_object->images[ni];
+
 			}
 
         }
-        //SAVING TEMPLATES YAML
-		if (linergb == true)
-			writeLineRGB(detector_rgb, filename, hsv);
-		if (line2d == true)
-			writeLine2D(detector_line2d, filename);
-		if (linemod == true)
-			writeLine2D(detector_linemod, filename);
-		cout << endl << filename << " saved" << endl;
-		if (linemodrgb == true)
-			writeLineRGB(detector_linemodrgb, filename, hsv);
-		cout << endl << filename << " saved" << endl;
 
-        total_train_timer.stop();
-        cout << "Whole train time: " << total_train_timer.time() << endl;
     }
+    //SAVING TEMPLATES YAML
+	if (linergb == true)
+		writeLineRGB(detector_rgb, filename, hsv);
+	if (line2d == true)
+		writeLine2D(detector_line2d, filename);
+	if (linemod == true)
+		writeLine2D(detector_linemod, filename);
+	if (linemodrgb == true)
+		writeLineRGB(detector_linemodrgb, filename, hsv);
+	cout << endl << filename << " saved" << endl;
+	templ_paths.release();
+    total_train_timer.stop();
+    cout << "Whole train time: " << total_train_timer.time() << endl;
 
 	//free memory
 	for(int no = 0; no < all_objects_templates.size(); no++)

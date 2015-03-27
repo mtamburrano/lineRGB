@@ -399,6 +399,8 @@ int main(int argc, char * argv[])
   cv::Ptr<cv::line_rgb::Detector> detector_linergb;
   std::string filename;
 
+  bool GROUP_SIMILAR_TEMPLATES = false;
+
   bool line2d = false;
   bool linemod = false;
   bool linergb = false;
@@ -833,7 +835,7 @@ std::cout<<" - 4 - "<<endl;
                   {
                       extract_timer.start();
                       int template_id;
-                      template_id = detector_linergb->addTemplate(sources, m.class_id, depth_mask);
+                      template_id = detector_linergb->addTemplate(sources, m.class_id, depth_mask, GROUP_SIMILAR_TEMPLATES);
                       extract_timer.stop();
                       if (template_id != -1)
                       {
@@ -858,7 +860,7 @@ std::cout<<" - 4 - "<<endl;
                               tmp_sources.push_back(sources_depth_resized_rotated[it_res_rot]);
 
                           extract_timer.start();
-                          int template_id = detector_linergb->addTemplate(tmp_sources, m.class_id, mask_resized_rotated[it_res_rot]);
+                          int template_id = detector_linergb->addTemplate(tmp_sources, m.class_id, mask_resized_rotated[it_res_rot], GROUP_SIMILAR_TEMPLATES);
                           extract_timer.stop();
                           cv::circle(display, cv::Point(30,30), 40, cv::Scalar(0,0,255), -1);
                           if (template_id != -1)
