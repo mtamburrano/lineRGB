@@ -1,7 +1,12 @@
 cmake_minimum_required(VERSION 2.8)
 
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${PROJECT_SOURCE_DIR}/cmake_modules/")
+
 find_package(OpenCV REQUIRED)
+find_package(libusb-1.0 REQUIRED)
+
 include_directories (${OpenCV_INCLUDE_DIR} )
+include_directories(${LIBUSB_1_INCLUDE_DIRS})
 
 link_directories (${cvimpulso_SOURCE_DIR}/lib)
 

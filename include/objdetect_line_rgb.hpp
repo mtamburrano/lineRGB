@@ -76,6 +76,15 @@
 /****************************************************************************************\
 *                                 LINE-RGB		                                         *
  \****************************************************************************************/
+class Pose {
+public:
+  float radius; //distance of the object from the camera
+  float Tx; //Translation x
+  float Ty; //Translation y
+  float Tz; //Translation z
+  float angle; //rotation angle
+};
+
 class TemplatesObject {
 public:
 	TemplatesObject() {};
@@ -84,6 +93,7 @@ public:
 	std::vector <std::string> masks;
 	std::vector <std::string> depths;
 	std::vector <std::string> images;
+	std::vector <Pose> poses;
 };
 
 
@@ -114,7 +124,7 @@ struct CV_EXPORTS Feature
     bool on_border;/// is the feature on the contour of the image?
 
     Feature() : x(0), y(0), label(0) {}
-    Feature(int x, int y, int label) : x(x), y(y), label(label) {}
+    //Feature(int x, int y, int label) : x(x), y(y), label(label) {}
     Feature(int x, int y, int label, int rgb_label, bool on_border) : x(x), y(y), label(label), rgb_label(rgb_label), on_border(on_border) {}
 
     void read(const FileNode& fn);
@@ -135,6 +145,11 @@ struct CV_EXPORTS Template
     std::vector<Feature> features_border;
     std::vector<Feature> color_features;
     int total_candidates;
+    float radius; //distance of the object from the camera
+    float Tx; //Translation x
+    float Ty; //Translation y
+    float Tz; //Translation z
+    float angle; //rotation angle
     void read(const FileNode& fn);
     void write(FileStorage& fs) const;
 };
@@ -181,9 +196,9 @@ public:
 protected:
     /// Candidate feature with a score
     struct Candidate {
-        Candidate(int x, int y, int label, float score) :
+        /*Candidate(int x, int y, int label, float score) :
                 f(x, y, label), score(score) {
-        }
+        }*/
 
         Candidate(int x, int y, int label, int rgb_label, bool on_border,
                 float score) :
@@ -444,7 +459,7 @@ public:
      * \return Template ID, or -1 if failed to extract a valid template.
      */
     int addTemplate(const std::vector<Mat>& sources, const std::string& class_id,
-            const Mat& object_mask, bool group_similar_templates, Rect* bounding_box = NULL);
+            const Mat& object_mask, bool group_similar_templates, Rect* bounding_box = NULL, Pose* pose = NULL);
 
     /**
      * \brief Add a new object template computed by external means.
@@ -479,7 +494,6 @@ public:
 
     int numTemplates() const;
     int numTemplates(const std::string& class_id) const;
-    //int numTemplateGroups() const;
     int numClasses() const {return static_cast<int>(class_templates.size());}
 
     std::vector<cv::String> classIds() const;
@@ -499,11 +513,6 @@ protected:
     int pyramid_levels;
     std::vector<int> T_at_level;
     bool color_features_enabled;
-    /*int num_template_groups;
-    //key: class_id+"_"+id_group  value: template_id;
-    std::map<std::string, int> groups_references;
-    //key: class_id  value: num of groups;
-    std::map<std::string, int> groups_count;*/
 
     typedef std::vector<Template> TemplatePyramid;
     typedef std::map<std::string, std::vector<TemplatePyramid> > TemplatesMap;

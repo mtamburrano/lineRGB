@@ -75,18 +75,19 @@
 #include "opencv2/calib3d/calib3d.hpp"
 #include <iomanip>
 #include <cmath>
+#include "opencv2/rgbd.hpp"
 
 //#define  SQR(a)      ((a) * (a))
 
-double SQR(double a)
+inline double SQR(double a)
 {
   return a*a;
 }
-float SQR(float a)
+inline float SQR(float a)
 {
   return a*a;
 }
-int SQR(int a)
+inline int SQR(int a)
 {
   return a*a;
 }
@@ -173,6 +174,7 @@ static inline int getLabel(int quantized) {
     case 128:
         return 7;
     default:
+        std::cout<<"Invalid label: "<<quantized<<endl;
         CV_Assert(false);
         return -1; //avoid warning
     }
@@ -251,7 +253,8 @@ Rect cropTemplates(std::vector<Template>& templates, const Mat& mask_template) {
         }
 
         //extract the contour of the object from mask at higher pyramid level for the signature
-        if (templ.pyramid_level == 0) {
+        bool CONTOUR_DISABLED = true;
+        if (templ.pyramid_level == 0 && CONTOUR_DISABLED == false) {
             Mat tmp_mask;
             cropped_mask.copyTo(tmp_mask);
 
@@ -273,7 +276,12 @@ void Template::read(const FileNode& fn) {
     height = fn["height"];
     pyramid_level = fn["pyramid_level"];
     total_candidates = fn["total_candidates"];
-    fn["contour"] >> contour;
+    radius = fn["radius"];
+    Tx = fn["Tx"];
+    Ty = fn["Ty"];
+    Tz = fn["Tz"];
+    angle = fn["angle"];
+    //fn["contour"] >> contour;
     fn["id_group"] >> id_group;
     FileNode features_border_fn = fn["features_border"];
     features_border.resize(features_border_fn.size());
@@ -302,8 +310,13 @@ void Template::write(FileStorage& fs) const {
     fs << "height" << height;
     fs << "pyramid_level" << pyramid_level;
     fs << "total_candidates" << total_candidates;
-    fs << "contour" << contour;
+    //fs << "contour" << contour;
     fs << "id_group" << id_group;
+    fs << "radius" << radius;
+    fs << "Tx" << Tx;
+    fs << "Ty" << Ty;
+    fs << "Tz" << Tz;
+    fs << "angle" << angle;
     fs << "features_border" << "[";
     for (int i = 0; i < (int) features_border.size(); ++i) {
         features_border[i].write(fs);
@@ -335,13 +348,15 @@ void QuantizedPyramid::selectScatteredFeatures(
         Candidate c = candidates[i];
 //cout<<"features.size(): "<<features.size()<<" - num_features: "<<num_features<<"candidates.size(): "<<candidates.size()<<endl;
         // Add if sufficient distance away from any previously chosen feature
-        bool keep = true;
-        for (int j = 0; (j < (int) features.size()) && keep; ++j) {
+        int j = 0;
+        for (; (j < (int) features.size()); ++j) {
             Feature f = features[j];
-            keep = SQR(c.f.x - f.x) + SQR(c.f.y - f.y) >= distance_sq;
+            if((SQR(c.f.x - f.x) + SQR(c.f.y - f.y)) < distance_sq){
+              break;
+            }
         }
-        if (keep)
-            features.push_back(c.f);
+        if(j == (int) features.size())
+          features.push_back(c.f);
 
         if (++i == (int) candidates.size()) {
             // Start back at beginning, and relax required distance
@@ -1200,151 +1215,225 @@ static void accumBilateral(long delta, long i, long j, long * A, long * b,
  *
  * \todo Should also need camera model, or at least focal lengths? Replace distance_threshold with mask?
  */
-void quantizedNormals(const Mat& src, Mat& dst, int distance_threshold,
+//void quantizedNormals(const Mat& src, Mat& dst, int distance_threshold,
+//        int difference_threshold) {
+//    dst = Mat::zeros(src.size(), CV_8U);
+//
+//    IplImage src_ipl = src;
+//    IplImage* ap_depth_data = &src_ipl;
+//    IplImage dst_ipl = dst;
+//    IplImage* dst_ipl_ptr = &dst_ipl;
+//    IplImage** m_dep = &dst_ipl_ptr;
+//
+//    unsigned short * lp_depth = (unsigned short *) ap_depth_data->imageData;
+//    unsigned char * lp_normals = (unsigned char *) m_dep[0]->imageData;
+//
+//    const int l_W = ap_depth_data->width;
+//    const int l_H = ap_depth_data->height;
+//
+//    const int l_r = 5; // used to be 7
+//    const int l_offset0 = -l_r - l_r * l_W;
+//    const int l_offset1 = 0 - l_r * l_W;
+//    const int l_offset2 = +l_r - l_r * l_W;
+//    const int l_offset3 = -l_r;
+//    const int l_offset4 = +l_r;
+//    const int l_offset5 = -l_r + l_r * l_W;
+//    const int l_offset6 = 0 + l_r * l_W;
+//    const int l_offset7 = +l_r + l_r * l_W;
+//
+//    const int l_offsetx = GRANULARITY / 2;
+//    const int l_offsety = GRANULARITY / 2;
+//
+//    for (int l_y = l_r; l_y < l_H - l_r - 1; ++l_y) {
+//        unsigned short * lp_line = lp_depth + (l_y * l_W + l_r);
+//        unsigned char * lp_norm = lp_normals + (l_y * l_W + l_r);
+//
+//        for (int l_x = l_r; l_x < l_W - l_r - 1; ++l_x) {
+//            long l_d = lp_line[0];
+//
+//            if (l_d < distance_threshold) {
+//                // accum
+//                long l_A[4];
+//                l_A[0] = l_A[1] = l_A[2] = l_A[3] = 0;
+//                long l_b[2];
+//                l_b[0] = l_b[1] = 0;
+//                accumBilateral(lp_line[l_offset0] - l_d, -l_r, -l_r, l_A, l_b,
+//                        difference_threshold);
+//                accumBilateral(lp_line[l_offset1] - l_d, 0, -l_r, l_A, l_b,
+//                        difference_threshold);
+//                accumBilateral(lp_line[l_offset2] - l_d, +l_r, -l_r, l_A, l_b,
+//                        difference_threshold);
+//                accumBilateral(lp_line[l_offset3] - l_d, -l_r, 0, l_A, l_b,
+//                        difference_threshold);
+//                accumBilateral(lp_line[l_offset4] - l_d, +l_r, 0, l_A, l_b,
+//                        difference_threshold);
+//                accumBilateral(lp_line[l_offset5] - l_d, -l_r, +l_r, l_A, l_b,
+//                        difference_threshold);
+//                accumBilateral(lp_line[l_offset6] - l_d, 0, +l_r, l_A, l_b,
+//                        difference_threshold);
+//                accumBilateral(lp_line[l_offset7] - l_d, +l_r, +l_r, l_A, l_b,
+//                        difference_threshold);
+//
+//                // solve
+//                long l_det = l_A[0] * l_A[3] - l_A[1] * l_A[1];
+//                long l_ddx = l_A[3] * l_b[0] - l_A[1] * l_b[1];
+//                long l_ddy = -l_A[1] * l_b[0] + l_A[0] * l_b[1];
+//
+//                /// @todo Magic number 1150 is focal length? This is something like
+//                /// f in SXGA mode, but in VGA is more like 530.
+//                float l_nx = static_cast<float>(1150 * l_ddx);
+//                float l_ny = static_cast<float>(1150 * l_ddy);
+//                float l_nz = static_cast<float>(-l_det * l_d);
+//
+//                float l_sqrt = sqrtf(l_nx * l_nx + l_ny * l_ny + l_nz * l_nz);
+//
+//                if (l_sqrt > 0) {
+//                    float l_norminv = 1.0f / (l_sqrt);
+//
+//                    l_nx *= l_norminv;
+//                    //cout<<"l_nx:"<<l_nx<<endl;
+//                    l_ny *= l_norminv;
+//                    l_nz *= l_norminv;
+//
+//                    //*lp_norm = fabs(l_nz)*255;
+//
+//                    int l_val1 = static_cast<int>(l_nx * l_offsetx + l_offsetx);
+//                    int l_val2 = static_cast<int>(l_ny * l_offsety + l_offsety);
+//                    int l_val3 = static_cast<int>(l_nz * GRANULARITY
+//                            + GRANULARITY);
+//
+//                    *lp_norm = NORMAL_LUT[l_val3][l_val2][l_val1];
+//                } else {
+//                    *lp_norm = 0; // Discard shadows from depth sensor
+//                }
+//            } else {
+//                *lp_norm = 0; //out of depth
+//            }
+//            ++lp_line;
+//            ++lp_norm;
+//        }
+//    }
+//    cout <<"(vecchia)count normal non zero prima: "<<cvCountNonZero(m_dep[0])<<endl;
+//    cvSmooth(m_dep[0], m_dep[0], CV_MEDIAN, 5, 5);
+//    cout <<"(vecchia)count normal non zero dopo: "<<cvCountNonZero(m_dep[0])<<endl;
+//}
+
+
+/*bool floatEquals(double a, double b)
+{
+    return std::fabs(a - b) < std::numeric_limits<double>::epsilon;
+}*/
+
+//#define EPSILON 1e-5
+inline bool floatEqual(float x, float y)
+{
+  x = roundf(x*1000000)/1000000;
+  return std::fabs(x - y) <= FLT_EPSILON;
+}
+
+inline float safeZero(float x)
+{
+  if(std::fabs(x) < FLT_EPSILON ){
+    if(x <0)
+      return -FLT_EPSILON ;
+    else
+      return FLT_EPSILON ;
+  }
+  else{
+    return x;
+  }
+}
+
+
+
+void quantizedNormals(const Mat& src, Mat& normals_out, int distance_threshold,
         int difference_threshold) {
-    dst = Mat::zeros(src.size(), CV_8U);
+  Matx33f K_ = Matx33f::eye();
+  K_(0,0) = 525.0;
+  K_(1,1) = 525.0;
+  K_(0,2) = 319.5;
+  K_(1,2) = 239.5;
 
-    IplImage src_ipl = src;
-    IplImage* ap_depth_data = &src_ipl;
-    IplImage dst_ipl = dst;
-    IplImage* dst_ipl_ptr = &dst_ipl;
-    IplImage** m_dep = &dst_ipl_ptr;
+  rgbd::RgbdNormals linemod(480, 640, CV_16U, K_, 3, rgbd::RgbdNormals::RGBD_NORMALS_METHOD_LINEMOD);
 
-    unsigned short * lp_depth = (unsigned short *) ap_depth_data->imageData;
-    unsigned char * lp_normals = (unsigned char *) m_dep[0]->imageData;
+  normals_out = Mat::zeros(src.size(), CV_8U);
+  //Mat normals = Mat::zeros(depth.size(), CV_32FC3);
+  Mat normals;
+  Mat depth3d;
+  Mat srctemp;
 
-    const int l_W = ap_depth_data->width;
-    const int l_H = ap_depth_data->height;
 
-    const int l_r = 5; // used to be 7
-    const int l_offset0 = -l_r - l_r * l_W;
-    const int l_offset1 = 0 - l_r * l_W;
-    const int l_offset2 = +l_r - l_r * l_W;
-    const int l_offset3 = -l_r;
-    const int l_offset4 = +l_r;
-    const int l_offset5 = -l_r + l_r * l_W;
-    const int l_offset6 = 0 + l_r * l_W;
-    const int l_offset7 = +l_r + l_r * l_W;
+  normals.create(480,640, CV_32FC3);
+  normals.setTo(0);
 
-    const int l_offsetx = GRANULARITY / 2;
-    const int l_offsety = GRANULARITY / 2;
+  linemod.operator ()(src, normals);
 
-    for (int l_y = l_r; l_y < l_H - l_r - 1; ++l_y) {
-        unsigned short * lp_line = lp_depth + (l_y * l_W + l_r);
-        unsigned char * lp_norm = lp_normals + (l_y * l_W + l_r);
 
-        for (int l_x = l_r; l_x < l_W - l_r - 1; ++l_x) {
-            long l_d = lp_line[0];
+  //float *input = (float*)(normals.data);
+  int channels = normals.channels();
+  int nRows = normals.rows;
+  int nCols = normals.cols*channels;
+  int i,j;
+  float* p;
+  const unsigned short* p_depth;
+  for( i = 0; i < nRows; ++i)
+  {
+      p = normals.ptr<float>(i);
+      p_depth = src.ptr<unsigned short>(i);
+      for ( j = 0; j < nCols; j+=3)
+      {
+        float x = p[j];
+        float y = p[j+1];
+        float z = p[j+2];
+        if (p_depth[(j/3)] >= distance_threshold) {
 
-            if (l_d < distance_threshold) {
-                // accum
-                long l_A[4];
-                l_A[0] = l_A[1] = l_A[2] = l_A[3] = 0;
-                long l_b[2];
-                l_b[0] = l_b[1] = 0;
-                accumBilateral(lp_line[l_offset0] - l_d, -l_r, -l_r, l_A, l_b,
-                        difference_threshold);
-                accumBilateral(lp_line[l_offset1] - l_d, 0, -l_r, l_A, l_b,
-                        difference_threshold);
-                accumBilateral(lp_line[l_offset2] - l_d, +l_r, -l_r, l_A, l_b,
-                        difference_threshold);
-                accumBilateral(lp_line[l_offset3] - l_d, -l_r, 0, l_A, l_b,
-                        difference_threshold);
-                accumBilateral(lp_line[l_offset4] - l_d, +l_r, 0, l_A, l_b,
-                        difference_threshold);
-                accumBilateral(lp_line[l_offset5] - l_d, -l_r, +l_r, l_A, l_b,
-                        difference_threshold);
-                accumBilateral(lp_line[l_offset6] - l_d, 0, +l_r, l_A, l_b,
-                        difference_threshold);
-                accumBilateral(lp_line[l_offset7] - l_d, +l_r, +l_r, l_A, l_b,
-                        difference_threshold);
-
-                // solve
-                long l_det = l_A[0] * l_A[3] - l_A[1] * l_A[1];
-                long l_ddx = l_A[3] * l_b[0] - l_A[1] * l_b[1];
-                long l_ddy = -l_A[1] * l_b[0] + l_A[0] * l_b[1];
-
-                /// @todo Magic number 1150 is focal length? This is something like
-                /// f in SXGA mode, but in VGA is more like 530.
-                float l_nx = static_cast<float>(1150 * l_ddx);
-                float l_ny = static_cast<float>(1150 * l_ddy);
-                float l_nz = static_cast<float>(-l_det * l_d);
-
-                float l_sqrt = sqrtf(l_nx * l_nx + l_ny * l_ny + l_nz * l_nz);
-
-                if (l_sqrt > 0) {
-                    float l_norminv = 1.0f / (l_sqrt);
-
-                    l_nx *= l_norminv;
-                    l_ny *= l_norminv;
-                    l_nz *= l_norminv;
-
-                    //*lp_norm = fabs(l_nz)*255;
-
-                    int l_val1 = static_cast<int>(l_nx * l_offsetx + l_offsetx);
-                    int l_val2 = static_cast<int>(l_ny * l_offsety + l_offsety);
-                    int l_val3 = static_cast<int>(l_nz * GRANULARITY
-                            + GRANULARITY);
-
-                    /*if(l_val1 <0 || l_val1>19)
-                                        {
-
-                                            std::cout<<"                                        l_val1 SCAPOCCIA: "<<l_val1<<std::endl;
-                                            std::cout<<"                                        l_nx: "<<l_nx<<std::endl;
-                                        }
-                    //                    else
-                    //                    {
-                    //                        std::cout<<"l_val1 GIUSTO: "<<l_val1<<std::endl;
-                    //                        std::cout<<"l_nx: "<<l_nx<<std::endl;
-                    //                    }
-                                        if(l_val2 <0 || l_val2>19)
-                                        {
-
-                                            std::cout<<"                                         l_val2 SCAPOCCIA: "<<l_val2<<std::endl;
-                                            std::cout<<"                                         l_ny: "<<l_ny<<std::endl;
-                                        }
-                    //                    else
-                    //                    {
-                    //                        std::cout<<"l_val2 GIUSTO: "<<l_val2<<std::endl;
-                    //                        std::cout<<"l_ny: "<<l_ny<<std::endl;
-                    //                    }
-                                        if(l_val3 <0 || l_val3>19)
-                                        {
-
-                                            std::cout<<"                                       l_val3 SCAPOCCIA: "<<l_val3<<std::endl;
-                                            std::cout<<"                                       l_nz: "<<l_nz<<std::endl;
-                                        }
-                    //                    else
-                    //                    {
-                    //                        std::cout<<"l_val3 GIUSTO: "<<l_val3<<std::endl;
-                    //                        std::cout<<"l_nz: "<<l_nz<<std::endl;
-                    //                    }
-
-                    if(l_nx == 1)
-                    {
-                        std::cout<<"l_nx == 1 - l_val1: "<<l_val1<<std::endl;
-                    }
-                    if(l_ny == 1)
-                    {
-                        std::cout<<"l_ny == 1 - l_val2: "<<l_val2<<std::endl;
-                    }
-                    if(l_nz == 0)
-                    {
-                        std::cout<<"l_nz == 0 - l_val3: "<<l_val3<<std::endl;
-                    }*/
-
-                    *lp_norm = NORMAL_LUT[l_val3][l_val2][l_val1];
-                } else {
-                    *lp_norm = 0; // Discard shadows from depth sensor
-                }
-            } else {
-                *lp_norm = 0; //out of depth
-            }
-            ++lp_line;
-            ++lp_norm;
+          normals_out.at<uchar>(i,j/3) = 0;
         }
-    }
-    cvSmooth(m_dep[0], m_dep[0], CV_MEDIAN, 5, 5);
+        else {
+
+
+          float l_sqrt = (x * x) + (y*y) + (z*z);
+
+          if(!floatEqual(l_sqrt, 0) && !floatEqual(l_sqrt, 1)){
+
+              std::cout << "l_sqrt in the new function should always be 0 or 1" << endl;
+              std::cout <<"l_sqrt: "<<l_sqrt<<endl;
+              CV_Assert(false);
+          }
+
+          if (l_sqrt > 0) {
+//              float l_norminv = 1.0f / (l_sqrt);
+
+//              x *= l_norminv;
+//              y *= l_norminv;
+//              z *= l_norminv;
+              x = safeZero(x);
+              y = safeZero(y);
+              z = safeZero(z);
+
+              /*std::cout <<"x"<<x<<endl;
+              std::cout <<"y"<<y<<endl;
+              std::cout <<"z"<<z<<endl;*/
+              //std::cout <<"l_norminv: "<<l_norminv<<endl;
+              int l_val1 = static_cast<int>(x * 10 + 10);
+              int l_val2 = static_cast<int>(y * 10 + 10);
+              int l_val3 = static_cast<int>(z * GRANULARITY
+                      + GRANULARITY);
+
+
+              normals_out.at<uchar>(i,j/3) = NORMAL_LUT[l_val3][l_val2][l_val1];
+
+
+          } else {
+            normals_out.at<uchar>(i,j/3) = 0; // Discard shadows from depth sensor
+          }
+
+        }
+      }
+  }
+  //cout << normals_out<<endl;
+  medianBlur(normals_out, normals_out,5);
+
 }
 
 class DepthNormalPyramid: public QuantizedPyramid {
@@ -1447,14 +1536,15 @@ bool DepthNormalPyramid::extractTemplate(Template& templ) const {
                     // region.
                     float score = distances[label].at<float>(r, c);
                     if (score >= extract_threshold) {
-                        candidates.push_back(Candidate(c, r, label, score));
+                        candidates.push_back(Candidate(c, r, label, -1, false, score));
                         ++label_counts[label];
                     }
                 }
             }
         }
     }
-    cout<<"depth candidates: " << candidates.size() << endl;
+//    imshow("normal",normal);
+//    waitKey();
     // We require a certain number of features
     if (candidates.size() < num_features)
         return false;
@@ -1485,8 +1575,17 @@ bool DepthNormalPyramid::extractTemplate(Template& templ) const {
 }
 
 DepthNormal::DepthNormal() :
-        distance_threshold(2000), difference_threshold(50), num_features(63), extract_threshold(
+        distance_threshold(3000), difference_threshold(50), num_features(63), extract_threshold(
                 2) {
+
+        if(distance_threshold == 2000)
+        {
+          cout<<endl<<endl<<"DISTANCE THRESHOLD == 2000, BUONO PER IL KINECT"<<endl<<endl<<endl;
+        }
+        if(distance_threshold == 3000)
+        {
+          cout<<endl<<endl<<"DISTANCE THRESHOLD == 3000, BUONO PER IL SENSOR STRUCTURE"<<endl<<endl<<endl;
+        }
 }
 
 DepthNormal::DepthNormal(int distance_threshold, int difference_threshold,
@@ -2628,6 +2727,11 @@ struct MatchPredicateCombined {
     float threshold;
 };
 
+// Used to filter out classes duplicates
+bool UniqueClasses(const Match& m1, const Match& m2) {
+	return(m1.class_id == m2.class_id);
+};
+
 struct RejectedPredicate {
     RejectedPredicate() {
     }
@@ -2759,8 +2863,12 @@ void Detector::match(const std::vector<Mat>& sources, float threshold,
     std::vector<Match>::iterator new_end = std::unique(matches.begin(),
             matches.end());
     matches.erase(new_end, matches.end());
+/*    //prune same class matches (only one match per class willl be kept)
+    new_end = std::unique(matches.begin(),
+            matches.end(), UniqueClasses);
+    matches.erase(new_end, matches.end());*/
 
-    if (matches.size() > 0) {
+    /*if (matches.size() > 0) {
 
             int not_rejected = 0;
 
@@ -2826,7 +2934,7 @@ void Detector::match(const std::vector<Mat>& sources, float threshold,
             matches.erase(new_end_rejected, matches.end());
 
 
-    }
+    }*/
 
 }
 
@@ -2844,7 +2952,10 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
     for (size_t template_id = 0; template_id < template_pyramids.size();
             ++template_id) {
         const TemplatePyramid& tp = template_pyramids[template_id];
-
+        //MATCH PER ID_GROUP ABILITATO
+        //int id_group = tp[0].id_group;
+        //MATCH PER ID_GROUP DISABILITATO
+        int id_group = template_id;
         // First match over the whole image at the lowest pyramid level
         /// @todo Factor this out into separate function
         const std::vector<LinearMemories>& lowest_lm = lm_pyramid.back();
@@ -2856,17 +2967,20 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
         std::vector < Mat > similarities_rgb(1);
         int lowest_start = static_cast<int>(tp.size() - modalities.size());
         int lowest_T = T_at_level.back();
-        int num_all_features = 0;
-        int num_color_features = 0;
+        int num_all_features_first_step = 0;
+        int num_color_features_first_step = 0;
         for (int i = 0; i < (int) modalities.size(); ++i) {
 
             const Template& templ = tp[lowest_start + i];
-            num_all_features += static_cast<int>(templ.features_border.size() + templ.features_inside.size());
-            num_color_features = static_cast<int>(templ.color_features.size());
+            num_all_features_first_step += static_cast<int>(templ.features_border.size() + templ.features_inside.size());
+
             if (i == 0) //color modality, add rgb
+            {
+                num_color_features_first_step = static_cast<int>(templ.color_features.size());
                 similarityRGB(lowest_lm[i], lowest_lm_rgb[i], templ,
                         similarities[i], similarities_rgb[i], sizes.back(),
                         lowest_T, color_features_enabled, only_non_border_color_features);
+            }
             if (i == 1) //depth modality, without rgb
                 similarity(lowest_lm[i], templ, similarities[i], sizes.back(),
                         lowest_T);
@@ -2886,8 +3000,8 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
         // threshold scales from half the max response (what you would expect from applying
         // the template to a completely random image) to the max response.
         // NOTE: This assumes max per-feature response is 4, so we scale between [2*nf, 4*nf].
-        int raw_threshold = static_cast<int>(2 * num_all_features
-                + (threshold / 100.f) * (2 * num_all_features) + 0.5f);
+        int raw_threshold = static_cast<int>(2 * num_all_features_first_step
+                + (threshold / 100.f) * (2 * num_all_features_first_step) + 0.5f);
 
         // Find initial matches
         std::vector < Match > candidates;
@@ -2909,11 +3023,11 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
                     int x = c * lowest_T + offset;
                     int y = r * lowest_T + offset;
                     float score = (raw_score * 100.f)
-                                                / (4 * num_all_features) + 0.5f;
+                                                / (4 * num_all_features_first_step) + 0.5f;
 
                     candidates.push_back(
                             Match(x, y, 0, score, -1, class_id,
-                                    static_cast<int>(template_id), 0));
+                                    static_cast<int>(id_group), 0));
                 }
             }
         }
@@ -2952,18 +3066,18 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
                 y = std::min(y, max_y);
 
                 // Compute local similarity maps for each modality
-                int num_all_features = 0;
-                int num_gradient_features = 0;
-                int num_inside_gradient_features = 0;
-                int num_color_features = 0;
+                int num_all_features_second_step = 0;
+                int num_gradient_features_second_step = 0;
+                int num_inside_gradient_features_second_step = 0;
+                int num_color_features_second_step = 0;
                 for (int i = 0; i < (int) modalities.size(); ++i) {
                     const Template& templ = tp[start + i];
-                    num_all_features += static_cast<int>(templ.features_border.size() + templ.features_inside.size());
-                    num_color_features = static_cast<int>(templ.color_features.size());
+                    num_all_features_second_step += static_cast<int>(templ.features_border.size() + templ.features_inside.size());
                     if(i == 0)
                     {
-                        num_gradient_features += static_cast<int>(templ.features_border.size() + templ.features_inside.size());
-                        num_inside_gradient_features += static_cast<int>(templ.features_inside.size());
+                        num_gradient_features_second_step += static_cast<int>(templ.features_border.size() + templ.features_inside.size());
+                        num_inside_gradient_features_second_step += static_cast<int>(templ.features_inside.size());
+                        num_color_features_second_step = static_cast<int>(templ.color_features.size());
                     }
 
                     if (i == 0) //color modality, add rgb
@@ -2975,13 +3089,12 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
                                 Point(x, y));
 
                 }
-                //if(modalities.size() == 2)
-                    //num_color_features  *= 2;
+                /*if(modalities.size() == 2)
+                    num_color_features  *= 2;*/
 
 
                 addSimilarities(similarities, total_similarity);
                 addSimilarities(similarities_rgb, total_similarity_rgb);
-
 
                 // Find best local adjustment
                 float best_score = 0;
@@ -2995,23 +3108,23 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
                         float score = row[c];
                         float score_rgb = row_rgb[c];
 
-                        score = (score * 100.f) / (4 * num_all_features);
+                        score = (score * 100.f) / (4 * num_all_features_second_step);
 
                         if (color_features_enabled == false)
                             score_rgb = (score_rgb * 100.f)
-                                    / (15 * num_gradient_features) + 0.5f;
+                                    / (15 * num_gradient_features_second_step) + 0.5f;
                         else
                         {
                             if (only_non_border_color_features == false)
                             {
                                 score_rgb = (score_rgb * 100.f)
-                                        / (15 * (num_gradient_features + num_color_features))
+                                        / (15 * (num_gradient_features_second_step + num_color_features_second_step))
                                         + 0.5f;
                             }
                             else //(only_non_border == true)
                             {
                                 score_rgb = (score_rgb * 100.f)
-                                        / (15 * (num_inside_gradient_features + num_color_features))
+                                        / (15 * (num_inside_gradient_features_second_step + num_color_features_second_step))
                                         + 0.5f;
                             }
 
@@ -3081,7 +3194,7 @@ void Detector::matchClass(const LinearMemoryPyramid& lm_pyramid,
 
 int Detector::addTemplate(const std::vector<Mat>& sources,
         const std::string& class_id, const Mat& object_mask,
-        bool group_similar_templates, Rect* bounding_box) {
+        bool group_similar_templates, Rect* bounding_box, Pose* pose) {
 
     int num_modalities = static_cast<int>(modalities.size());
     std::vector < TemplatePyramid > &template_pyramids =
@@ -3104,16 +3217,17 @@ int Detector::addTemplate(const std::vector<Mat>& sources,
             }
 
             bool success = qp->extractTemplate(tp[l * num_modalities + i]);
-            if (!success)
+            if (!success) {
+              cout<< "template non aggiunto"<<endl;
                 return -1;
+            }
         }
     }
 
     Rect bb = cropTemplates(tp, object_mask);
     if (bounding_box)
         *bounding_box = bb;
-
-	int idg = -1;
+    int idg = -1;
     //if group_similar_templates is enabled
     if(group_similar_templates) {
     	float matching_discarded = 95.0;
@@ -3143,9 +3257,16 @@ int Detector::addTemplate(const std::vector<Mat>& sources,
     	}
     }
 
-    //insert the right id_group
-    for(int i = 0; i<tp.size(); i++)
+    //insert the right id_group and pose
+    for(int i = 0; i<tp.size(); i++) {
     	tp[i].id_group = idg;
+    	tp[i].radius = pose->radius;
+    	tp[i].Tx = pose->Tx;
+    	tp[i].Ty = pose->Ty;
+    	tp[i].Tz = pose->Tz;
+    	tp[i].angle = pose->angle;
+    }
+
 
     /// @todo Can probably avoid a copy of tp here with swap
     template_pyramids.push_back(tp);

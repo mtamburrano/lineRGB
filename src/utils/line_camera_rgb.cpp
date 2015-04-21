@@ -391,7 +391,7 @@ int main(int argc, char * argv[])
   // Initialize HighGUI
   help();
   cv::namedWindow("color");
-  cv::namedWindow("normals");
+  //cv::namedWindow("normals");
   Mouse::start("color");
 
   // Initialize LINEMOD data structures
@@ -567,10 +567,13 @@ int main(int argc, char * argv[])
     //std::cout<<"depth) rows: "<<depth.rows<<" -cols: "<< depth.cols<<" - type: "<<depth.type()<<" - elemsize: "<<depth.elemSize()<< " - elemsize1: "<<depth.elemSize1()<<std::endl;
     //std::cout<<"color) rows: "<<color.rows<<" -cols: "<< color.cols<<" - type: "<<color.type()<<" - elemsize: "<<color.elemSize()<< " - elemsize1: "<<color.elemSize1()<<std::endl;
 
+    int NUM_ERASED_MATCHES = 0;
     /*	DEBUG UNA IMMAGINE
      *
-     * color = imread("./image_00000.png", 1);
-    FileStorage fis("./depth_00000.yml", FileStorage::READ);
+     */
+
+    //color = imread("../data/sensore2/image_01993.png", 1);
+    /*FileStorage fis("./depth_00000.yml", FileStorage::READ);
     				fis["depth"] >> depth;
     				depth.convertTo(depth, CV_16S);*/
 
@@ -578,6 +581,28 @@ int main(int argc, char * argv[])
     sources.push_back(color);
     if(num_modalities == 2) {
         sources.push_back(depth);
+    }
+
+
+    //show blended depth
+    {
+      double alpha = 0.5; double beta;
+      beta = ( 1.0 - alpha );
+      Mat colorDisplay, depthDisplay;
+      double min;
+      double max;
+      minMaxIdx(depth, &min, &max);
+      cout << "max: " << max << endl;
+      convertScaleAbs(depth, depthDisplay, 255 / max);
+      colorDisplay = color.clone();
+      colorDisplay.convertTo(colorDisplay, CV_8UC3);
+      //cvtColor(colorDisplay,colorDisplay,CV_RGBA2RGB);
+      depthDisplay.convertTo(depthDisplay, CV_8UC1);
+      Mat blend;
+      cvtColor(depthDisplay,blend,CV_GRAY2RGB);
+      addWeighted( colorDisplay, alpha, blend, beta, 0.0, blend);
+      imshow("blend",blend);
+      imshow("depthDisplay",depthDisplay);
     }
 
     cv::Mat display = color.clone();
@@ -790,6 +815,15 @@ std::cout<<" - 4 - "<<endl;
 
     if(linemodrgb  == true || linergb == true)
     {
+      cout<<"MATCHES SIZE: "<<matches_linergb.size()<<endl;
+
+      //TO DEBUG GROUP ID
+      for(int ncanc = 0; ncanc < NUM_ERASED_MATCHES && matches_linergb.size()>0; ncanc++) {
+        cout << "erase " << ncanc << "st match"<<endl;
+        matches_linergb.erase(matches_linergb.begin());
+      }
+      //matches_linergb.erase(matches_linergb.begin());
+
         for (int i = 0; (i < (int)matches_linergb.size()) && (classes_visited < num_classes); ++i)
         {
           cv::line_rgb::Match m = matches_linergb[i];
@@ -800,7 +834,7 @@ std::cout<<" - 4 - "<<endl;
 
             if (show_match_result)
             {
-              printf("Similarity combined: %5.1f%%; Similarity 2d: %5.1f%%; Similarity rgb: %5.1f%%; x: %3d; y: %3d; class: %s; template: %3d\n",
+              printf("Similarity combined: %5.1f%%; Similarity: %5.1f%%; Similarity rgb: %5.1f%%; x: %3d; y: %3d; class: %s; template: %3d\n",
                      m.sim_combined, m.similarity, m.similarity_rgb, m.x, m.y, m.class_id.c_str(), m.template_id);
             }
 
@@ -906,15 +940,23 @@ std::cout<<" - 4 - "<<endl;
       printf("------------------------------------------------------------\n");
 
     cv::imshow("color", display);
-    cv::imshow("normals", quantized_images[0]);
+    //cv::imshow("normals", quantized_images[0]);
 
     cv::FileStorage fs;
     char key = (char)cv::waitKey(10);
     if( key == 'q' )
         break;
 
+    FileStorage storage;
     switch (key)
     {
+      case 'd':
+        storage.open("./depth_debug.yml", cv::FileStorage::WRITE);
+        cout<<"DEPTHCOLS: "<<depth.cols<<endl;
+        storage << "depth" << depth;
+        storage.release();
+        imwrite("rgb_debug.png", color);
+        break;
       case 'h':
         help();
         break;

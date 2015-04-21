@@ -120,7 +120,7 @@ endif()
 set(GTK_INTERFACE OFF CACHE BOOL "Enable GTK INTERFACE for Impulso")
 
 
-set(EXTRA_C_FLAGS_RELEASE "${EXTRA_C_FLAGS_RELEASE} -march=native -mtune=native -ggdb3 ")
+set(EXTRA_C_FLAGS_RELEASE "${EXTRA_C_FLAGS_RELEASE} -march=native -mtune=native")
 if(USE_OMIT_FRAME_POINTER)   
    set(EXTRA_C_FLAGS_RELEASE "${EXTRA_C_FLAGS_RELEASE} -fomit-frame-pointer")
 endif()
@@ -180,7 +180,7 @@ endif()
 
 
 # High level of warnings.
-set(EXTRA_C_FLAGS "${EXTRA_C_FLAGS} -Wall -Wextra -std=c++0x -w") #-w to disable warnings # -Weffc++ -Wextra")
+set(EXTRA_C_FLAGS "${EXTRA_C_FLAGS} -Wall -Wextra -std=c++0x -w -g -fno-omit-frame-pointer") #-w to disable warnings # -Weffc++ -Wextra")
 
 # The -Wno-long-long is required in 64bit systems when including sytem headers.
 if(${CMAKE_SYSTEM_PROCESSOR} MATCHES x86_64*)
