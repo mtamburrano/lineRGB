@@ -543,6 +543,7 @@ int main(int argc, char * argv[])
 
   // Main loop
   Mat color(Size(640,480),CV_8UC3,Scalar(0));
+  Mat depthFreenect(Size(640,480),CV_16UC1);
   Mat depth(Size(640,480),CV_16UC1);
   int index_template_shown = 0;
 
@@ -563,7 +564,8 @@ int main(int argc, char * argv[])
 
  //FREENECT
     device.getVideo(color);
-    device.getDepth(depth);
+    device.getDepth(depthFreenect);
+    depthFreenect.convertTo(depth, CV_16U);
     //std::cout<<"depth) rows: "<<depth.rows<<" -cols: "<< depth.cols<<" - type: "<<depth.type()<<" - elemsize: "<<depth.elemSize()<< " - elemsize1: "<<depth.elemSize1()<<std::endl;
     //std::cout<<"color) rows: "<<color.rows<<" -cols: "<< color.cols<<" - type: "<<color.type()<<" - elemsize: "<<color.elemSize()<< " - elemsize1: "<<color.elemSize1()<<std::endl;
 

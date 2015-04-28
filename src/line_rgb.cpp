@@ -1324,11 +1324,11 @@ static void accumBilateral(long delta, long i, long j, long * A, long * b,
     return std::fabs(a - b) < std::numeric_limits<double>::epsilon;
 }*/
 
-//#define EPSILON 1e-5
+#define EPSILON 0.00001
 inline bool floatEqual(float x, float y)
 {
   x = roundf(x*1000000)/1000000;
-  return std::fabs(x - y) <= FLT_EPSILON;
+  return std::fabs(x - y) <= EPSILON;
 }
 
 inline float safeZero(float x)
@@ -1354,7 +1354,7 @@ void quantizedNormals(const Mat& src, Mat& normals_out, int distance_threshold,
   K_(0,2) = 319.5;
   K_(1,2) = 239.5;
 
-  rgbd::RgbdNormals linemod(480, 640, CV_16U, K_, 3, rgbd::RgbdNormals::RGBD_NORMALS_METHOD_LINEMOD);
+  rgbd::RgbdNormals linemod(480, 640, CV_32F, K_, 3, rgbd::RgbdNormals::RGBD_NORMALS_METHOD_LINEMOD);
 
   normals_out = Mat::zeros(src.size(), CV_8U);
   //Mat normals = Mat::zeros(depth.size(), CV_32FC3);
@@ -1363,11 +1363,17 @@ void quantizedNormals(const Mat& src, Mat& normals_out, int distance_threshold,
   Mat srctemp;
 
 
-  normals.create(480,640, CV_32FC3);
-  normals.setTo(0);
+  //normals = Mat::zeros(480,640, CV_32FC3);
+  //normals.setTo(0);
+
+  //prova 32f
+  //Mat src32f;
+  //src.convertTo(src32f, CV_32F);
 
   linemod.operator ()(src, normals);
 
+  //cout<<normals<<endl;
+  //writeMat(normals, "normals", 0);
 
   //float *input = (float*)(normals.data);
   int channels = normals.channels();
@@ -1543,8 +1549,9 @@ bool DepthNormalPyramid::extractTemplate(Template& templ) const {
             }
         }
     }
-//    imshow("normal",normal);
-//    waitKey();
+    /*cout<< "depth candidates size: "<<candidates.size()<<endl;
+    imshow("normal",normal);
+    waitKey();*/
     // We require a certain number of features
     if (candidates.size() < num_features)
         return false;
